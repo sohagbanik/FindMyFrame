@@ -13,6 +13,7 @@ from app.models.entities import (
     SelfieRecord,
     SelfieStatus,
 )
+from app.models.faces import FaceRecord
 
 
 class JsonRepository:
@@ -52,6 +53,7 @@ class JsonRepository:
             selfie["created_at"] = record.selfie.created_at.isoformat()
             selfie["processing_status"] = record.selfie.processing_status.value
             data["selfie"] = selfie
+        data["face_records"] = [face.model_dump(mode="json") for face in record.face_records]
         return data
 
     @staticmethod
@@ -61,7 +63,8 @@ class JsonRepository:
         selfie = None
         if selfie_data:
             selfie = SelfieRecord(**{**selfie_data, "created_at": datetime.fromisoformat(selfie_data["created_at"]), "processing_status": SelfieStatus(selfie_data["processing_status"])})
-        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0))
+        faces = [FaceRecord.model_validate(item) for item in data.get("face_records", [])]
+        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0), face_records=faces, face_processing_status=data.get("face_processing_status", "not_started"), face_processing_error_count=data.get("face_processing_error_count", 0))
 
     def create_collection(self, record: CollectionRecord) -> CollectionRecord:
         with self._lock:

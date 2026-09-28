@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MOCK_PHOTOS } from '../data/mockPhotos'
 import { ArrowIcon, BackIcon, CloseIcon, DownloadIcon, LockIcon, PlusIcon, ShareIcon } from '../components/Icons'
 import { ImageWithFallback } from '../components/ImageWithFallback'
+import { getCollectionStatus } from '../api/collections'
 
 const steps = ['Collection', 'Selfie', 'Your moments']
 
@@ -129,11 +130,38 @@ export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSam
 
 const processingCopy = ['Looking through the crowd.', 'Finding familiar faces.', 'Almost there.', 'Bringing your moments together.']
 
-export function ProcessingView({ onComplete, photoCount = 4283, onBack, onHome }) {
+export function ProcessingView({ onComplete, photoCount = 4283, onBack, onHome, collectionId, realProcessing = false, onProcessingError }) {
   const [progress, setProgress] = useState(0)
   const [copyIndex, setCopyIndex] = useState(0)
 
   useEffect(() => {
+    if (realProcessing && collectionId) {
+      let cancelled = false
+      const started = performance.now()
+      let pollTimer
+      const poll = async () => {
+        try {
+          const status = await getCollectionStatus(collectionId)
+          if (cancelled) return
+          if (status.face_processing_status === 'complete' || status.face_processing_status === 'complete_with_errors') {
+            setProgress(100)
+            onComplete()
+            return
+          }
+          if (status.face_processing_status === 'failed') {
+            onProcessingError?.('We couldn’t finish looking through this collection. You can try the search again.')
+            return
+          }
+          const elapsedProgress = Math.min(93, ((performance.now() - started) / 9000) * 93)
+          setProgress((current) => Math.max(current, elapsedProgress))
+          pollTimer = window.setTimeout(poll, 800)
+        } catch (error) {
+          if (!cancelled) onProcessingError?.(error.message || 'We couldn’t read the processing status.')
+        }
+      }
+      poll()
+      return () => { cancelled = true; window.clearTimeout(pollTimer) }
+    }
     const start = performance.now()
     let frame
     const tick = (now) => {
@@ -145,7 +173,7 @@ export function ProcessingView({ onComplete, photoCount = 4283, onBack, onHome }
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [onComplete])
+  }, [collectionId, onComplete, onProcessingError, realProcessing])
 
   const scanned = Math.round((progress / 100) * photoCount)
   return <main className="processing-shell">
@@ -172,7 +200,7 @@ function PhotoCard({ photo, selected, onSelect, onOpen, index }) {
   </article>
 }
 
-export function ResultsView({ onOpen, onStartOver, collectionCount, onHome }) {
+export function ResultsView({ onOpen, onStartOver, collectionCount, onHome, isDemo = true }) {
   const [selected, setSelected] = useState([])
   const [notice, setNotice] = useState('')
 
@@ -189,13 +217,11 @@ export function ResultsView({ onOpen, onStartOver, collectionCount, onHome }) {
   return <main className="results-shell">
     <FlowHeader onBack={onStartOver} onHome={onHome} />
     <section className="results-head" aria-labelledby="results-title">
-      <div><p className="eyebrow"><span className="eyebrow-dot" /> search complete · {collectionCount || 'your'} collection</p><h1 id="results-title">Your <em>moments.</em></h1><p className="results-subtitle"><strong>37 photos found</strong><span>We kept the best matches first.</span></p></div>
-      <div className="results-actions"><button className="outline-action" type="button" onClick={share}><ShareIcon /> Share</button><button className="outline-action" type="button" disabled={!selected.length} onClick={() => setNotice(`${selected.length} selected ${selected.length === 1 ? 'photo is' : 'photos are'} ready to download.`)}><DownloadIcon /> Download {selected.length ? `(${selected.length})` : 'selected'}</button></div>
+      <div><p className="eyebrow"><span className="eyebrow-dot" /> {isDemo ? `search complete · ${collectionCount || 'your'} collection` : `collection prepared · ${collectionCount || 'your'} collection`}</p><h1 id="results-title">{isDemo ? <>Your <em>moments.</em></> : <>Ready for<br /><em>matching.</em></>}</h1><p className="results-subtitle"><strong>{isDemo ? '37 photos found' : 'Face index prepared'}</strong><span>{isDemo ? 'We kept the best matches first.' : 'Similarity search arrives in the next phase.'}</span></p></div>
+      <div className="results-actions">{isDemo && <><button className="outline-action" type="button" onClick={share}><ShareIcon /> Share</button><button className="outline-action" type="button" disabled={!selected.length} onClick={() => setNotice(`${selected.length} selected ${selected.length === 1 ? 'photo is' : 'photos are'} ready to download.`)}><DownloadIcon /> Download {selected.length ? `(${selected.length})` : 'selected'}</button></>}</div>
     </section>
     {notice && <p className="results-notice" role="status">{notice}</p>}
-    <div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div>
-    <section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section>
-    <div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div>
+    {isDemo ? <><div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div><section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section><div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div></> : <div className="index-ready-empty"><span className="empty-orbit" aria-hidden="true" /><h2>The collection is ready<br /><em>for your face.</em></h2><p>We found and prepared the faces in your event photos. We haven’t shown any matches yet — that is the next step.</p></div>}
     <footer className="results-footer"><button className="text-action" type="button" onClick={onStartOver}>Start a new search</button><PrivacyNote /></footer>
   </main>
 }

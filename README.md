@@ -1,6 +1,6 @@
 # FindMyFrame
 
-FindMyFrame helps people find the photographs they are in. The current repository contains the editorial React/Vite experience from Phases 1–2 and a local FastAPI ingestion foundation from Phase 3.
+FindMyFrame helps people find the photographs they are in. The repository contains the editorial React/Vite experience, a local FastAPI ingestion foundation, and the first real face-processing pipeline.
 
 ## Run the frontend
 
@@ -23,6 +23,16 @@ python -m pip install -r backend/requirements.txt
 python -m uvicorn app.main:app --app-dir backend --reload --port 8000
 ```
 
+### Face model setup
+
+The face pipeline uses pretrained OpenCV Zoo ONNX weights: YuNet for detection and SFace-MobileFaceNet for learned face embeddings. No model training or dataset is involved. Install dependencies in the virtual environment, then download and verify the public model files once:
+
+```bash
+.venv\Scripts\python backend/download_models.py
+```
+
+The downloader verifies the expected SHA-256 checksums. Model files are stored in `backend/models/`, are ignored by Git, and are never downloaded from an API request. CPU inference is the default; set `FINDMYFRAME_CV_DEVICE=cuda` only with a compatible CUDA-enabled OpenCV runtime.
+
 The API exposes:
 
 | Method | Endpoint | Purpose |
@@ -31,24 +41,36 @@ The API exposes:
 | POST | `/api/collections` | Create an event-scoped collection |
 | POST | `/api/collections/{id}/photos` | Ingest multiple JPG, PNG, or WEBP files |
 | POST | `/api/collections/{id}/selfie` | Ingest one temporary reference image |
+| POST | `/api/collections/{id}/process-faces` | Queue event-photo face detection and embedding |
+| POST | `/api/collections/{id}/process-selfie` | Detect exactly one face and embed the selfie |
 | GET | `/api/collections/{id}` | Read collection and ingestion status |
 
 Uploaded originals are kept outside Git under `backend/runtime/collections/<collection_id>/`. Metadata is stored in `backend/runtime/collections.json` for development. The storage and repository adapters are deliberately replaceable with S3/Supabase and PostgreSQL later.
 
-## Phase 3 limitations
+## Face Recognition Architecture
 
-- Face detection, embeddings, similarity search, authentication, and Google Drive are not implemented.
+```text
+Image
+  ↓
+Image validation + EXIF orientation
+  ↓
+YuNet face detection
+  ↓
+SFace-MobileFaceNet aligned face embedding
+  ↓
+Private JSON development persistence
+  ↓
+Future similarity matching
+```
+
+The model runs during inference only. Face boxes, detector confidence, native embedding vectors, model checksums, and processing state stay backend-side. The same SFace model processes event faces and the selfie. No names, identity profiles, third-party AI APIs, vector search, or final matching are implemented yet.
+
+For event photos, no-face images are valid and continue through the batch. Small faces are recorded without an embedding; image/model errors are attached to that photo rather than aborting the whole collection. Selfies require exactly one usable face and return structured errors for zero or multiple faces.
+
+## Current limitations
+
+- Similarity search, authentication, and Google Drive are not implemented.
 - The existing processing/results screens still use the frontend demo path when a sample collection is selected.
 - Real local image uploads are sent to the FastAPI ingestion endpoints when the backend is running.
 - Invalid or oversized files are rejected with structured JSON errors; mixed uploads return successful photos plus `failed_files`.
-
-## CV extension point
-
-`backend/app/services/face_service.py` and `matching_service.py` define explicit boundaries for the future worker pipeline:
-
-```text
-ingested photo → face detection → embedding storage
-reference selfie → embedding → similarity search → ranked matches
-```
-
-Phase 3 intentionally does not create fake embeddings or claim that ingestion is matching.
+- Real uploaded collections are indexed by the backend, but the gallery does not claim matches until Phase 5 adds similarity search and ranking.

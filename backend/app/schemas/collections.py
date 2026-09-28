@@ -22,6 +22,9 @@ class PhotoResponse(BaseModel):
     image_format: str
     created_at: datetime
     processing_status: PhotoStatus
+    face_count: int = 0
+    faces_embedded: int = 0
+    face_processing_error: str | None = None
 
 
 class FailedUploadResponse(BaseModel):
@@ -48,6 +51,9 @@ class SelfieResponse(BaseModel):
     image_format: str
     created_at: datetime
     processing_status: SelfieStatus
+    face_count: int = 0
+    faces_embedded: int = 0
+    face_processing_error: str | None = None
 
 
 class CollectionStatusResponse(BaseModel):
@@ -59,3 +65,15 @@ class CollectionStatusResponse(BaseModel):
     failed_photo_count: int
     selfie_status: SelfieStatus | None = None
     processing_state: str = "ingestion_ready"
+    face_processing_status: str = "not_started"
+    faces_detected: int = 0
+    faces_embedded: int = 0
+
+
+class FaceProcessingResponse(BaseModel):
+    collection_id: str
+    status: str
+    photos_processed: int
+    photos_failed: int
+    faces_detected: int
+    faces_embedded: int

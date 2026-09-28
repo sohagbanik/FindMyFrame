@@ -7,3 +7,6 @@ backend/runtime/
 backend/storage/
 __pycache__/
 *.py[cod]
+.venv/
+backend/models/
+*.onnx

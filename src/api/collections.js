@@ -16,6 +16,14 @@ export function uploadCollectionSelfie(collectionId, file) {
   return request(`/api/collections/${collectionId}/selfie`, { method: 'POST', body })
 }
 
+export function processCollectionSelfie(collectionId) {
+  return request(`/api/collections/${collectionId}/process-selfie`, { method: 'POST' })
+}
+
+export function processCollectionFaces(collectionId) {
+  return request(`/api/collections/${collectionId}/process-faces`, { method: 'POST' })
+}
+
 export function getCollectionStatus(collectionId) {
   return request(`/api/collections/${collectionId}`)
 }

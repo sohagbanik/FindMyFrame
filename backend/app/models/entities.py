@@ -42,6 +42,9 @@ class PhotoRecord:
     image_format: str
     created_at: datetime
     processing_status: PhotoStatus = PhotoStatus.READY
+    face_count: int = 0
+    faces_embedded: int = 0
+    face_processing_error: str | None = None
 
 
 @dataclass
@@ -57,6 +60,9 @@ class SelfieRecord:
     image_format: str
     created_at: datetime
     processing_status: SelfieStatus = SelfieStatus.READY
+    face_count: int = 0
+    faces_embedded: int = 0
+    face_processing_error: str | None = None
 
 
 @dataclass
@@ -67,3 +73,6 @@ class CollectionRecord:
     photos: list[PhotoRecord] = field(default_factory=list)
     selfie: SelfieRecord | None = None
     failed_photo_count: int = 0
+    face_records: list[object] = field(default_factory=list)
+    face_processing_status: str = "not_started"
+    face_processing_error_count: int = 0
