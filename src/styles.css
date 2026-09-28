@@ -191,6 +191,7 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .ghost-action { align-items: center; background: transparent; border: 0; color: var(--muted); display: inline-flex; font-size: 11px; gap: 9px; padding: 12px 0; }
 .ghost-action:hover { color: var(--ink); }
 .ghost-action svg { height: 14px; width: 14px; }
+.upload-error { background: #ead8ce; border-left: 2px solid var(--accent); color: #6c3e32; font-size: 11px; line-height: 1.45; margin: 25px 0 -12px; padding: 11px 13px; }
 .future-source { border-top: 1px solid var(--line); color: var(--muted); display: grid; grid-template-columns: 95px auto; margin-top: 48px; padding-top: 20px; }
 .future-source > span { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .future-source button { background: none; border: 0; color: #77776f; font-size: 12px; padding: 0; text-align: left; }

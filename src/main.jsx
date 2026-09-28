@@ -5,6 +5,7 @@ import { ArrowIcon, LockIcon, SparkIcon } from './components/Icons'
 import { MOCK_PHOTOS, SAMPLE_SELFIE } from './data/mockPhotos'
 import { CollectionView, ProcessingView, ResultsView, SelfieView, Viewer } from './views/FlowViews'
 import { ImageWithFallback } from './components/ImageWithFallback'
+import { createCollection, uploadCollectionPhotos, uploadCollectionSelfie } from './api/collections'
 
 const landingImages = {
   crowd: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=85',
@@ -61,11 +62,16 @@ function LandingView({ onStart }) {
 function App() {
   const [screen, setScreen] = useState('landing')
   const [collection, setCollection] = useState([])
+  const [collectionId, setCollectionId] = useState(null)
   const [selfie, setSelfie] = useState(null)
   const [viewerIndex, setViewerIndex] = useState(null)
+  const [collectionUpload, setCollectionUpload] = useState({ loading: false, error: '' })
+  const [selfieUpload, setSelfieUpload] = useState({ loading: false, error: '' })
 
   const start = () => setScreen('collection')
-  const reset = () => { setScreen('landing'); setCollection([]); setSelfie(null); setViewerIndex(null) }
+  const releaseCollectionAssets = (items) => items.forEach((file) => { if (file.url?.startsWith('blob:')) URL.revokeObjectURL(file.url); if (file.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview) })
+  const releaseSelfieAsset = (item) => { if (item?.url?.startsWith('blob:')) URL.revokeObjectURL(item.url) }
+  const reset = () => { releaseCollectionAssets(collection); releaseSelfieAsset(selfie); setScreen('landing'); setCollection([]); setCollectionId(null); setSelfie(null); setViewerIndex(null); setCollectionUpload({ loading: false, error: '' }); setSelfieUpload({ loading: false, error: '' }) }
   const appendCollection = (incoming) => setCollection((current) => [...current, ...incoming.filter((file) => !current.some((existing) => existing.name === file.name && existing.size === file.size))])
   const removeCollectionFile = (id) => setCollection((current) => {
     const file = current.find((item) => item.id === id)
@@ -73,15 +79,41 @@ function App() {
     if (file?.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview)
     return current.filter((item) => item.id !== id)
   })
-  const clearCollection = () => { collection.forEach((file) => { if (file.url?.startsWith('blob:')) URL.revokeObjectURL(file.url); if (file.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview) }); setCollection([]) }
-  const startOver = () => { clearCollection(); setSelfie(null); setScreen('collection') }
-  const useSampleCollection = () => setCollection(MOCK_PHOTOS.slice(0, 5).map((photo, index) => ({ id: `sample-${photo.id}`, name: `event-frame-${index + 1}.jpg`, size: 1800000 + index * 170000, url: photo.src, preview: photo.src, isSample: true })))
-  const useSampleSelfie = () => setSelfie({ ...SAMPLE_SELFIE, id: 'sample-selfie' })
+  const clearCollection = () => { releaseCollectionAssets(collection); setCollection([]); setCollectionId(null); setCollectionUpload({ loading: false, error: '' }) }
+  const startOver = () => { clearCollection(); releaseSelfieAsset(selfie); setSelfie(null); setSelfieUpload({ loading: false, error: '' }); setScreen('collection') }
+  const useSampleCollection = () => { releaseCollectionAssets(collection); setCollectionId(null); setCollectionUpload({ loading: false, error: '' }); setCollection(MOCK_PHOTOS.slice(0, 5).map((photo, index) => ({ id: `sample-${photo.id}`, name: `event-frame-${index + 1}.jpg`, size: 1800000 + index * 170000, url: photo.src, preview: photo.src, isSample: true }))) }
+  const useSampleSelfie = () => { releaseSelfieAsset(selfie); setSelfieUpload({ loading: false, error: '' }); setSelfie({ ...SAMPLE_SELFIE, id: 'sample-selfie' }) }
+  const setSelfieAndReleasePrevious = (nextSelfie) => { releaseSelfieAsset(selfie); setSelfieUpload({ loading: false, error: '' }); setSelfie(nextSelfie) }
+  const continueWithCollection = async () => {
+    const files = collection.map((item) => item.file).filter(Boolean)
+    if (!files.length) { setScreen('selfie'); return }
+    setCollectionUpload({ loading: true, error: '' })
+    try {
+      const created = collectionId ? { collection_id: collectionId } : await createCollection()
+      const response = await uploadCollectionPhotos(created.collection_id, files)
+      setCollectionId(created.collection_id)
+      setCollectionUpload({ loading: false, error: response.failed_files?.length ? `${response.failed_files.length} photo${response.failed_files.length === 1 ? '' : 's'} couldn’t be added. The rest are ready.` : '' })
+      if (response.photos.length) setScreen('selfie')
+    } catch (error) {
+      setCollectionUpload({ loading: false, error: error.message || 'Some photos couldn’t be added. Please try again.' })
+    }
+  }
+  const continueWithSelfie = async () => {
+    if (!selfie?.file || !collectionId) { setScreen('processing'); return }
+    setSelfieUpload({ loading: true, error: '' })
+    try {
+      await uploadCollectionSelfie(collectionId, selfie.file)
+      setSelfieUpload({ loading: false, error: '' })
+      setScreen('processing')
+    } catch (error) {
+      setSelfieUpload({ loading: false, error: error.message || 'Your selfie couldn’t be added. Please try another photo.' })
+    }
+  }
   const finishProcessing = useCallback(() => setScreen('results'), [])
 
   if (screen === 'landing') return <LandingView onStart={start} />
-  if (screen === 'collection') return <CollectionView files={collection} onFiles={appendCollection} onRemove={removeCollectionFile} onClear={clearCollection} onContinue={() => setScreen('selfie')} onSample={useSampleCollection} onBack={reset} onHome={reset} />
-  if (screen === 'selfie') return <SelfieView selfie={selfie} onSelfie={setSelfie} onContinue={() => setScreen('processing')} onBack={() => setScreen('collection')} onHome={reset} onSample={useSampleSelfie} />
+  if (screen === 'collection') return <CollectionView files={collection} onFiles={appendCollection} onRemove={removeCollectionFile} onClear={clearCollection} onContinue={continueWithCollection} onSample={useSampleCollection} onBack={reset} onHome={reset} isUploading={collectionUpload.loading} errorMessage={collectionUpload.error} />
+  if (screen === 'selfie') return <SelfieView selfie={selfie} onSelfie={setSelfieAndReleasePrevious} onContinue={continueWithSelfie} onBack={() => setScreen('collection')} onHome={reset} onSample={useSampleSelfie} isUploading={selfieUpload.loading} errorMessage={selfieUpload.error} />
   if (screen === 'processing') return <ProcessingView onComplete={finishProcessing} onBack={() => setScreen('collection')} onHome={() => setScreen('collection')} />
   if (screen === 'results') return <>
     <ResultsView onOpen={(photo) => setViewerIndex(MOCK_PHOTOS.findIndex((item) => item.id === photo.id))} onStartOver={startOver} onHome={reset} collectionCount={`${collection.length || 5} photos`} />

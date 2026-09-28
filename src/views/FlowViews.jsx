@@ -53,7 +53,7 @@ function PrivacyNote() {
   return <p className="inline-privacy"><span><LockIcon /></span><span><strong>Private by design.</strong> Your selfie stays scoped to this search.</span></p>
 }
 
-export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome }) {
+export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome, isUploading = false, errorMessage = '' }) {
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef(null)
 
@@ -62,6 +62,7 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
       id: `${file.name}-${file.lastModified}-${Math.random()}`,
       name: file.name,
       size: file.size,
+      file,
       url: URL.createObjectURL(file),
       preview: URL.createObjectURL(file),
     }))
@@ -74,7 +75,7 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
     <div className="aside-line" />
     <p className="aside-small">Google Drive ingestion is coming soon. For now, local photographs stay on this device.</p>
   </>}>
-    <div className={`upload-zone ${dragging ? 'is-dragging' : ''} ${files.length ? 'has-files' : ''}`} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); acceptFiles(Array.from(event.dataTransfer.files)) }}>
+    <div className={`upload-zone ${dragging ? 'is-dragging' : ''} ${files.length ? 'has-files' : ''}`} aria-busy={isUploading} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); acceptFiles(Array.from(event.dataTransfer.files)) }}>
       <input ref={inputRef} id="collection-upload" className="visually-hidden" type="file" accept="image/*" multiple onChange={(event) => acceptFiles(Array.from(event.target.files))} />
       <label className="upload-zone-action" htmlFor="collection-upload">
         <span className="upload-plus"><PlusIcon /></span>
@@ -91,19 +92,20 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
       </div>
     </div>}
 
+    {errorMessage && <p className="upload-error" role="alert">{errorMessage}</p>}
     <div className="flow-actions">
-      <button className="primary-button" type="button" disabled={!files.length} onClick={onContinue}>Continue to selfie <ArrowIcon /></button>
+      <button className="primary-button" type="button" disabled={!files.length || isUploading} onClick={onContinue}>{isUploading ? 'Adding photographs…' : 'Continue to selfie'} {!isUploading && <ArrowIcon />}</button>
       {!files.length && <button className="ghost-action" type="button" onClick={onSample}>Try the small demo collection <ArrowIcon /></button>}
     </div>
     <div className="future-source"><span>Another way</span><button type="button" disabled aria-describedby="drive-note">Google Drive folder <span>soon</span></button><small id="drive-note">Drive access will be added after the local flow is proven.</small></div>
   </FlowFrame>
 }
 
-export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample }) {
+export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample, isUploading = false, errorMessage = '' }) {
   const [dragging, setDragging] = useState(false)
   const chooseSelfie = (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    onSelfie({ id: `${file.name}-${file.lastModified}`, name: file.name, size: file.size, url: URL.createObjectURL(file) })
+    onSelfie({ id: `${file.name}-${file.lastModified}`, name: file.name, size: file.size, file, url: URL.createObjectURL(file) })
   }
 
   return <FlowFrame current={1} eyebrow="step two / the reference" title={<>Find<br /><em>yourself.</em></>} copy="Upload a clear photo of yourself. We’ll use it to find the moments you’re in." onBack={onBack} onHome={onHome} aside={<>
@@ -116,8 +118,9 @@ export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSam
       <input id="selfie-upload" className="visually-hidden" type="file" accept="image/*" capture="user" onChange={(event) => chooseSelfie(event.target.files[0])} />
       {selfie ? <div className="selfie-preview-wrap"><ImageWithFallback src={selfie.url} alt="Your reference selfie" /><div className="selfie-preview-overlay"><span>Ready to look</span><label htmlFor="selfie-upload">Replace photo</label></div></div> : <label className="selfie-upload-action" htmlFor="selfie-upload"><span className="selfie-frame-icon"><span /></span><strong>Drop your selfie here</strong><span>or <u>take a photo</u> on your phone</span></label>}
     </div>
+    {errorMessage && <p className="upload-error" role="alert">{errorMessage}</p>}
     <div className="flow-actions">
-      <button className="primary-button" type="button" disabled={!selfie} onClick={onContinue}>Find my moments <ArrowIcon /></button>
+      <button className="primary-button" type="button" disabled={!selfie || isUploading} onClick={onContinue}>{isUploading ? 'Saving your reference…' : 'Find my moments'} {!isUploading && <ArrowIcon />}</button>
       {!selfie && <button className="ghost-action" type="button" onClick={onSample}>Use a sample selfie <ArrowIcon /></button>}
     </div>
     <PrivacyNote />

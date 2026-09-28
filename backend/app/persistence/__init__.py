@@ -1,0 +1,1 @@
+"""Small development persistence adapters."""
