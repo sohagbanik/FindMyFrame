@@ -76,3 +76,5 @@ class CollectionRecord:
     face_records: list[object] = field(default_factory=list)
     face_processing_status: str = "not_started"
     face_processing_error_count: int = 0
+    matching_status: str = "not_started"
+    match_count: int = 0

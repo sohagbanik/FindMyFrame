@@ -43,6 +43,8 @@ The API exposes:
 | POST | `/api/collections/{id}/selfie` | Ingest one temporary reference image |
 | POST | `/api/collections/{id}/process-faces` | Queue event-photo face detection and embedding |
 | POST | `/api/collections/{id}/process-selfie` | Detect exactly one face and embed the selfie |
+| POST | `/api/collections/{id}/match` | Rank real photo matches by embedding similarity |
+| GET | `/api/collections/{id}/photos/{photo_id}` | Controlled image retrieval for a collection photo |
 | GET | `/api/collections/{id}` | Read collection and ingestion status |
 
 Uploaded originals are kept outside Git under `backend/runtime/collections/<collection_id>/`. Metadata is stored in `backend/runtime/collections.json` for development. The storage and repository adapters are deliberately replaceable with S3/Supabase and PostgreSQL later.
@@ -60,16 +62,28 @@ SFace-MobileFaceNet aligned face embedding
   ↓
 Private JSON development persistence
   ↓
-Future similarity matching
+Selfie embedding
+  ↓
+Cosine similarity
+  ↓
+Configurable threshold filtering
+  ↓
+Photo grouping and ranking
+  ↓
+Real results
 ```
 
 The model runs during inference only. Face boxes, detector confidence, native embedding vectors, model checksums, and processing state stay backend-side. The same SFace model processes event faces and the selfie. No names, identity profiles, third-party AI APIs, vector search, or final matching are implemented yet.
 
 For event photos, no-face images are valid and continue through the batch. Small faces are recorded without an embedding; image/model errors are attached to that photo rather than aborting the whole collection. Selfies require exactly one usable face and return structured errors for zero or multiple faces.
 
+### Matching thresholds
+
+`FACE_MATCH_STRONG_THRESHOLD` and `FACE_MATCH_POSSIBLE_THRESHOLD` are initial development values, not universally valid biometric boundaries. They must be calibrated empirically against representative event data before production use. The current matcher compares normalized 128-dimensional vectors with cosine similarity, keeps the best face score per photo, and never returns raw embeddings to the frontend.
+
 ## Current limitations
 
-- Similarity search, authentication, and Google Drive are not implemented.
+- Authentication and Google Drive are not implemented.
 - The existing processing/results screens still use the frontend demo path when a sample collection is selected.
 - Real local image uploads are sent to the FastAPI ingestion endpoints when the backend is running.
 - Invalid or oversized files are rejected with structured JSON errors; mixed uploads return successful photos plus `failed_files`.

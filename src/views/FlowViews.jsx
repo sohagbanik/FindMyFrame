@@ -200,9 +200,11 @@ function PhotoCard({ photo, selected, onSelect, onOpen, index }) {
   </article>
 }
 
-export function ResultsView({ onOpen, onStartOver, collectionCount, onHome, isDemo = true }) {
+export function ResultsView({ onOpen, onStartOver, collectionCount, onHome, isDemo = true, matches = [], errorMessage = '' }) {
   const [selected, setSelected] = useState([])
   const [notice, setNotice] = useState('')
+  const hasMatches = isDemo || matches.length > 0
+  const possibleMatches = matches.filter((match) => match.match_type === 'possible').length
 
   const toggleSelected = (id) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   const share = async () => {
@@ -217,11 +219,11 @@ export function ResultsView({ onOpen, onStartOver, collectionCount, onHome, isDe
   return <main className="results-shell">
     <FlowHeader onBack={onStartOver} onHome={onHome} />
     <section className="results-head" aria-labelledby="results-title">
-      <div><p className="eyebrow"><span className="eyebrow-dot" /> {isDemo ? `search complete · ${collectionCount || 'your'} collection` : `collection prepared · ${collectionCount || 'your'} collection`}</p><h1 id="results-title">{isDemo ? <>Your <em>moments.</em></> : <>Ready for<br /><em>matching.</em></>}</h1><p className="results-subtitle"><strong>{isDemo ? '37 photos found' : 'Face index prepared'}</strong><span>{isDemo ? 'We kept the best matches first.' : 'Similarity search arrives in the next phase.'}</span></p></div>
-      <div className="results-actions">{isDemo && <><button className="outline-action" type="button" onClick={share}><ShareIcon /> Share</button><button className="outline-action" type="button" disabled={!selected.length} onClick={() => setNotice(`${selected.length} selected ${selected.length === 1 ? 'photo is' : 'photos are'} ready to download.`)}><DownloadIcon /> Download {selected.length ? `(${selected.length})` : 'selected'}</button></>}</div>
+      <div><p className="eyebrow"><span className="eyebrow-dot" /> {isDemo ? `search complete · ${collectionCount || 'your'} collection` : 'real search · similarity ranked'}</p><h1 id="results-title">{isDemo || hasMatches ? <>Your <em>moments.</em></> : <>Nothing <em>confident.</em></>}</h1><p className="results-subtitle"><strong>{isDemo ? '37 photos found' : `${matches.length} photo${matches.length === 1 ? '' : 's'} found`}</strong><span>{isDemo ? 'We kept the best matches first.' : errorMessage || (matches.length ? 'Ranked by actual face similarity.' : 'Try a clearer selfie or another collection.')}</span></p></div>
+      <div className="results-actions"><button className="outline-action" type="button" onClick={share}><ShareIcon /> Share</button><button className="outline-action" type="button" disabled={!selected.length} onClick={() => setNotice(`${selected.length} selected ${selected.length === 1 ? 'photo is' : 'photos are'} ready to download.`)}><DownloadIcon /> Download {selected.length ? `(${selected.length})` : 'selected'}</button></div>
     </section>
     {notice && <p className="results-notice" role="status">{notice}</p>}
-    {isDemo ? <><div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div><section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section><div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div></> : <div className="index-ready-empty"><span className="empty-orbit" aria-hidden="true" /><h2>The collection is ready<br /><em>for your face.</em></h2><p>We found and prepared the faces in your event photos. We haven’t shown any matches yet — that is the next step.</p></div>}
+    {isDemo ? <><div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div><section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section><div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div></> : hasMatches ? <><div className="results-rule"><span>Similarity ranked</span><span>{possibleMatches ? `${possibleMatches} possible match${possibleMatches === 1 ? '' : 'es'}` : 'Strong matches only'}</span></div><section className="photo-gallery" aria-label="Your matched photographs">{matches.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section></> : <div className="index-ready-empty"><span className="empty-orbit" aria-hidden="true" /><h2>We looked carefully.<br /><em>Nothing confident.</em></h2><p>{errorMessage || 'We couldn’t find a face in this collection that crossed the development threshold. Try another selfie or collection.'}</p></div>}
     <footer className="results-footer"><button className="text-action" type="button" onClick={onStartOver}>Start a new search</button><PrivacyNote /></footer>
   </main>
 }
@@ -238,7 +240,7 @@ export function Viewer({ photo, onClose, onPrevious, onNext }) {
   return <div className="viewer-backdrop" role="dialog" aria-modal="true" aria-label={`${photo.label} photograph`}>
     <button className="viewer-close" type="button" onClick={onClose} aria-label="Close photograph viewer"><CloseIcon /></button>
     <button className="viewer-nav viewer-nav-prev" type="button" onClick={onPrevious} aria-label="Previous photograph"><BackIcon /></button>
-    <figure className="viewer-figure"><ImageWithFallback src={photo.src} alt={photo.alt} /><figcaption><span>{photo.label}</span><span>FindMyFrame · strong match</span></figcaption></figure>
+    <figure className="viewer-figure"><ImageWithFallback src={photo.src} alt={photo.alt} /><figcaption><span>{photo.label}</span><span>FindMyFrame · {photo.match_type ? `${photo.match_type} match · ${photo.similarity_score.toFixed(2)}` : 'strong match'}</span></figcaption></figure>
     <button className="viewer-nav viewer-nav-next" type="button" onClick={onNext} aria-label="Next photograph"><ArrowIcon /></button>
     <a className="viewer-download" href={photo.src} download={`findmyframe-${photo.id}.jpg`} target="_blank" rel="noreferrer"><DownloadIcon /> Download</a>
   </div>

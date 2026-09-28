@@ -24,6 +24,10 @@ export function processCollectionFaces(collectionId) {
   return request(`/api/collections/${collectionId}/process-faces`, { method: 'POST' })
 }
 
+export function matchCollection(collectionId) {
+  return request(`/api/collections/${collectionId}/match`, { method: 'POST' })
+}
+
 export function getCollectionStatus(collectionId) {
   return request(`/api/collections/${collectionId}`)
 }

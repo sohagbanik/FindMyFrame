@@ -68,6 +68,8 @@ class CollectionStatusResponse(BaseModel):
     face_processing_status: str = "not_started"
     faces_detected: int = 0
     faces_embedded: int = 0
+    matching_status: str = "not_started"
+    match_count: int = 0
 
 
 class FaceProcessingResponse(BaseModel):
@@ -77,3 +79,23 @@ class FaceProcessingResponse(BaseModel):
     photos_failed: int
     faces_detected: int
     faces_embedded: int
+
+
+class MatchResultResponse(BaseModel):
+    photo_id: str
+    collection_id: str
+    similarity_score: float
+    match_type: str
+    image_url: str
+    original_filename: str
+    width: int
+    height: int
+
+
+class MatchResponse(BaseModel):
+    collection_id: str
+    status: str
+    matches: list[MatchResultResponse] = Field(default_factory=list)
+    match_count: int
+    strong_match_count: int
+    possible_match_count: int

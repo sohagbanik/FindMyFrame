@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 
 from app.config import Settings, settings
 from app.models.entities import CollectionRecord, PhotoRecord, SelfieRecord
@@ -8,6 +11,8 @@ from app.schemas.collections import (
     CreateCollectionResponse,
     FailedUploadResponse,
     FaceProcessingResponse,
+    MatchResponse,
+    MatchResultResponse,
     PhotoResponse,
     SelfieResponse,
     UploadPhotosResponse,
@@ -15,6 +20,7 @@ from app.schemas.collections import (
 from app.services.ingestion_service import IngestionError, IngestionService
 from app.services.face_model import FaceError, SFaceModel
 from app.services.face_service import FaceService
+from app.services.matching_service import MatchingError, MatchingService, PhotoMatch
 from app.storage.local_storage import LocalStorage
 
 
@@ -23,6 +29,7 @@ repository = JsonRepository(settings.storage_root)
 storage = LocalStorage(settings.storage_root)
 ingestion_service = IngestionService(settings, repository, storage)
 face_service = FaceService(SFaceModel(settings.model_root, settings.cv_device), settings.storage_root, repository)
+matching_service = MatchingService(settings, repository)
 
 
 def get_ingestion_service() -> IngestionService:
@@ -31,6 +38,10 @@ def get_ingestion_service() -> IngestionService:
 
 def get_face_service() -> FaceService:
     return face_service
+
+
+def get_matching_service() -> MatchingService:
+    return matching_service
 
 
 def _photo_response(photo: PhotoRecord) -> PhotoResponse:
@@ -47,6 +58,10 @@ def _raise_ingestion_error(error: IngestionError, filename: str | None = None) -
 
 
 def _raise_face_error(error: FaceError) -> None:
+    raise HTTPException(status_code=error.status, detail={"code": error.code, "message": error.message})
+
+
+def _raise_matching_error(error: MatchingError) -> None:
     raise HTTPException(status_code=error.status, detail={"code": error.code, "message": error.message})
 
 
@@ -118,6 +133,24 @@ def process_selfie(collection_id: str, service: FaceService = Depends(get_face_s
     return _selfie_response(repository.get_collection(collection_id).selfie)
 
 
+def _match_response(collection_id: str, matches: list[PhotoMatch], status_value: str) -> MatchResponse:
+    response_matches = [MatchResultResponse(photo_id=match.photo.id, collection_id=collection_id, similarity_score=round(match.score, 6), match_type=match.match_type, image_url=f"/api/collections/{collection_id}/photos/{match.photo.id}", original_filename=match.photo.original_filename, width=match.photo.width, height=match.photo.height) for match in matches]
+    return MatchResponse(collection_id=collection_id, status=status_value, matches=response_matches, match_count=len(response_matches), strong_match_count=sum(match.match_type == "strong" for match in response_matches), possible_match_count=sum(match.match_type == "possible" for match in response_matches))
+
+
+@router.post("/{collection_id}/match", response_model=MatchResponse)
+def match_collection(collection_id: str, service: MatchingService = Depends(get_matching_service)):
+    service.set_matching_status(collection_id, "matching")
+    try:
+        matches = service.match_selfie_to_collection(collection_id)
+    except MatchingError as error:
+        service.set_matching_status(collection_id, "matching_failed")
+        _raise_matching_error(error)
+    result_status = "matched" if matches else "no_matches"
+    service.set_matching_status(collection_id, result_status, len(matches))
+    return _match_response(collection_id, matches, result_status)
+
+
 @router.get("/{collection_id}", response_model=CollectionStatusResponse)
 def collection_status(collection_id: str, service: IngestionService = Depends(get_ingestion_service)):
     try:
@@ -128,4 +161,19 @@ def collection_status(collection_id: str, service: IngestionService = Depends(ge
     selfie_status = collection.selfie.processing_status if collection.selfie else None
     photo_faces = sum(photo.face_count for photo in collection.photos)
     embedded_faces = sum(photo.faces_embedded for photo in collection.photos)
-    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces)
+    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces, matching_status=collection.matching_status, match_count=collection.match_count)
+
+
+@router.get("/{collection_id}/photos/{photo_id}")
+def get_collection_photo(collection_id: str, photo_id: str):
+    collection = repository.get_collection(collection_id)
+    if not collection:
+        raise HTTPException(status_code=404, detail={"code": "collection_not_found", "message": "That photo collection could not be found."})
+    photo = next((photo for photo in collection.photos if photo.id == photo_id), None)
+    if not photo:
+        raise HTTPException(status_code=404, detail={"code": "photo_not_found", "message": "That photograph could not be found."})
+    root = settings.storage_root.resolve()
+    path = (settings.storage_root / photo.storage_path).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail={"code": "photo_unavailable", "message": "That photograph is no longer available."})
+    return FileResponse(path, media_type=photo.mime_type, filename=Path(photo.original_filename).name)

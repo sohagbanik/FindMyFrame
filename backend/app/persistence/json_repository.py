@@ -64,7 +64,7 @@ class JsonRepository:
         if selfie_data:
             selfie = SelfieRecord(**{**selfie_data, "created_at": datetime.fromisoformat(selfie_data["created_at"]), "processing_status": SelfieStatus(selfie_data["processing_status"])})
         faces = [FaceRecord.model_validate(item) for item in data.get("face_records", [])]
-        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0), face_records=faces, face_processing_status=data.get("face_processing_status", "not_started"), face_processing_error_count=data.get("face_processing_error_count", 0))
+        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0), face_records=faces, face_processing_status=data.get("face_processing_status", "not_started"), face_processing_error_count=data.get("face_processing_error_count", 0), matching_status=data.get("matching_status", "not_started"), match_count=data.get("match_count", 0))
 
     def create_collection(self, record: CollectionRecord) -> CollectionRecord:
         with self._lock:
