@@ -23,6 +23,7 @@ class DriveFile:
     name: str
     mime_type: str
     size: int | None
+    resource_key: str | None = None
 
 
 class GoogleDriveClient:
@@ -68,21 +69,24 @@ class GoogleDriveClient:
         page_token = ""
         query = f"'{folder_id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'"
         while True:
-            params = {"q": query, "pageSize": "1000", "fields": "nextPageToken,files(id,name,mimeType,size)", "orderBy": "name_natural"}
+            params = {"q": query, "pageSize": "1000", "fields": "nextPageToken,files(id,name,mimeType,size,resourceKey)", "orderBy": "name_natural"}
             if page_token:
                 params["pageToken"] = page_token
             payload = self._request_json("files", params)
             for item in payload.get("files", []):
                 if item.get("mimeType") in self.SUPPORTED_MIME_TYPES and item.get("id"):
-                    yield DriveFile(file_id=item["id"], name=item.get("name") or "drive-photo", mime_type=item["mimeType"], size=int(item["size"]) if item.get("size") else None)
+                    yield DriveFile(file_id=item["id"], name=item.get("name") or "drive-photo", mime_type=item["mimeType"], size=int(item["size"]) if item.get("size") else None, resource_key=item.get("resourceKey"))
             page_token = payload.get("nextPageToken", "")
             if not page_token:
                 return
 
-    def download_file(self, file_id: str) -> BinaryIO:
+    def download_file(self, file_id: str, resource_key: str | None = None) -> BinaryIO:
         if not self.settings.google_drive_api_key:
             raise DriveIntegrationError("drive_not_configured", "Google Drive import is not configured on this server yet.", 503)
-        query = urlencode({"alt": "media", "key": self.settings.google_drive_api_key})
+        params = {"alt": "media", "key": self.settings.google_drive_api_key}
+        if resource_key:
+            params["resourceKey"] = resource_key
+        query = urlencode(params)
         request = Request(f"{self.settings.google_drive_api_base_url.rstrip('/')}/files/{file_id}?{query}", headers={"Accept": "application/octet-stream"})
         try:
             return urlopen(request, timeout=120)
@@ -110,7 +114,7 @@ class GoogleDriveImportService:
         for drive_file in self.client.list_images(folder_id):
             discovered += 1
             try:
-                with self.client.download_file(drive_file.file_id) as content:
+                with self.client.download_file(drive_file.file_id, drive_file.resource_key) as content:
                     _, duplicate = self.ingestion.ingest_drive_photo(collection_id, drive_file.file_id, folder_id, drive_file.name, drive_file.mime_type, content)
                 if duplicate:
                     duplicates += 1

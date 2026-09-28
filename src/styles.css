@@ -243,7 +243,7 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .orbit-core { background: var(--accent); border-radius: 50%; height: 21px; left: calc(50% - 10px); position: absolute; top: calc(50% - 10px); width: 21px; }
 .processing-center h1 { font-size: clamp(56px, 7vw, 93px); }
 .processing-status { color: var(--muted); font-size: 14px; margin: 27px 0 36px; min-height: 20px; }
-.processing-meter { background: #dad4ca; height: 3px; max-width: 490px; overflow: hidden; width: min(70vw, 490px); }
+.processing-meter { background: #dad4ca; height: 8px; max-width: 490px; overflow: hidden; width: min(70vw, 490px); }
 .processing-meter span { background: var(--accent); display: block; height: 100%; transition: width .12s linear; }
 .processing-count { align-items: baseline; display: flex; gap: 9px; margin-top: 15px; max-width: 490px; width: min(70vw, 490px); }
 .processing-count strong { font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 500; }
