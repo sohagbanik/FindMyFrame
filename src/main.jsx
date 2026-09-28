@@ -74,6 +74,7 @@ function App() {
     return current.filter((item) => item.id !== id)
   })
   const clearCollection = () => { collection.forEach((file) => { if (file.url?.startsWith('blob:')) URL.revokeObjectURL(file.url); if (file.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview) }); setCollection([]) }
+  const startOver = () => { clearCollection(); setSelfie(null); setScreen('collection') }
   const useSampleCollection = () => setCollection(MOCK_PHOTOS.slice(0, 5).map((photo, index) => ({ id: `sample-${photo.id}`, name: `event-frame-${index + 1}.jpg`, size: 1800000 + index * 170000, url: photo.src, preview: photo.src, isSample: true })))
   const useSampleSelfie = () => setSelfie({ ...SAMPLE_SELFIE, id: 'sample-selfie' })
   const finishProcessing = useCallback(() => setScreen('results'), [])
@@ -83,7 +84,7 @@ function App() {
   if (screen === 'selfie') return <SelfieView selfie={selfie} onSelfie={setSelfie} onContinue={() => setScreen('processing')} onBack={() => setScreen('collection')} onHome={reset} onSample={useSampleSelfie} />
   if (screen === 'processing') return <ProcessingView onComplete={finishProcessing} onBack={() => setScreen('collection')} onHome={() => setScreen('collection')} />
   if (screen === 'results') return <>
-    <ResultsView onOpen={(photo) => setViewerIndex(MOCK_PHOTOS.findIndex((item) => item.id === photo.id))} onStartOver={() => setScreen('collection')} onHome={reset} collectionCount={`${collection.length || 5} photos`} />
+    <ResultsView onOpen={(photo) => setViewerIndex(MOCK_PHOTOS.findIndex((item) => item.id === photo.id))} onStartOver={startOver} onHome={reset} collectionCount={`${collection.length || 5} photos`} />
     {viewerIndex !== null && <Viewer photo={MOCK_PHOTOS[viewerIndex]} onClose={() => setViewerIndex(null)} onPrevious={() => setViewerIndex((index) => (index - 1 + MOCK_PHOTOS.length) % MOCK_PHOTOS.length)} onNext={() => setViewerIndex((index) => (index + 1) % MOCK_PHOTOS.length)} />}
   </>
 }
