@@ -86,7 +86,7 @@ For event photos, no-face images are valid and continue through the batch. Small
 
 The MVP accepts a Google Drive folder URL such as `https://drive.google.com/drive/folders/FOLDER_ID`. The folder must be accessible to anyone with the link, and the backend needs a Google Drive API key with the Drive API enabled. Set `GOOGLE_DRIVE_API_KEY` in the backend environment; never expose it to the frontend or commit it.
 
-The importer uses the official Drive API, paginates image discovery, supports JPEG/PNG/WEBP, downloads bytes through the existing ingestion/validation/storage path, and deduplicates repeated imports with Drive file IDs. OAuth/private-folder access, Drive subfolder traversal, and Google account linking are intentionally not implemented.
+The importer uses the official Drive API, paginates image discovery, requests `resourceKey`, `modifiedTime`, and `capabilities.canDownload`, sends documented `X-Goog-Drive-Resource-Keys` headers when keys are available, supports JPEG/PNG/WEBP, downloads bytes through the existing ingestion/validation/storage path, and deduplicates repeated imports with Drive file IDs. A folder can be listable while individual file bytes remain non-downloadable to an API-key-only client; those files are reported individually instead of failing the whole import. OAuth/private-folder access, Drive subfolder traversal, and Google account linking are intentionally not implemented.
 
 ## Current limitations
 

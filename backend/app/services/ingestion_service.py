@@ -73,7 +73,7 @@ class IngestionService:
         self.repository.save_collection(collection)
         return selfie
 
-    def ingest_drive_photo(self, collection_id: str, drive_file_id: str, drive_folder_id: str, filename: str, content_type: str | None, source: BinaryIO) -> tuple[PhotoRecord, bool]:
+    def ingest_drive_photo(self, collection_id: str, drive_file_id: str, drive_folder_id: str, filename: str, content_type: str | None, source: BinaryIO, modified_time: str | None = None) -> tuple[PhotoRecord, bool]:
         collection = self._collection_or_raise(collection_id)
         existing = next((photo for photo in collection.photos if photo.drive_file_id == drive_file_id), None)
         if existing:
@@ -89,7 +89,7 @@ class IngestionService:
             collection.status = CollectionStatus.READY if collection.photos else CollectionStatus.FAILED
             self.repository.save_collection(collection)
             raise
-        photo = PhotoRecord(id=uuid.uuid4().hex, collection_id=collection_id, original_filename=filename or "drive-upload", storage_path=relative_path, mime_type=metadata.mime_type, file_size=file_size, width=metadata.width, height=metadata.height, image_format=metadata.image_format, created_at=datetime.now(timezone.utc), source="google_drive", drive_file_id=drive_file_id, drive_folder_id=drive_folder_id)
+        photo = PhotoRecord(id=uuid.uuid4().hex, collection_id=collection_id, original_filename=filename or "drive-upload", storage_path=relative_path, mime_type=metadata.mime_type, file_size=file_size, width=metadata.width, height=metadata.height, image_format=metadata.image_format, created_at=datetime.now(timezone.utc), source="google_drive", drive_file_id=drive_file_id, drive_folder_id=drive_folder_id, drive_modified_time=modified_time)
         collection.photos.append(photo)
         collection.status = CollectionStatus.READY
         self.repository.save_collection(collection)

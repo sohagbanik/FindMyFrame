@@ -48,6 +48,7 @@ class PhotoRecord:
     source: str = "local_upload"
     drive_file_id: str | None = None
     drive_folder_id: str | None = None
+    drive_modified_time: str | None = None
 
 
 @dataclass

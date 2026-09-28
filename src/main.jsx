@@ -111,7 +111,10 @@ function App() {
       const response = await importGoogleDriveFolder(created.collection_id, folderUrl)
       setCollectionId(created.collection_id)
       setIsDemoSession(false)
-      setDriveImport({ loading: false, error: response.failed_count ? `${response.imported_count} photos imported. ${response.failed_count} couldn’t be added.` : '', summary: response })
+      const downloadCodes = new Set(['drive_file_download_disabled', 'drive_file_additional_access', 'drive_file_inaccessible', 'drive_file_not_downloadable'])
+      const hadDownloadFailures = response.failed_files?.some((failure) => downloadCodes.has(failure.code))
+      const importMessage = response.failed_count ? hadDownloadFailures ? `${response.imported_count} photos imported. Some files were found but Google Drive did not allow their content to be downloaded.` : `${response.imported_count} photos imported. ${response.failed_count} couldn’t be added.` : ''
+      setDriveImport({ loading: false, error: importMessage, summary: response })
       if (response.imported_count > 0 || response.duplicate_count > 0) setScreen('selfie')
     } catch (error) {
       setDriveImport({ loading: false, error: error.message || 'We couldn’t import this Drive folder.', summary: null })

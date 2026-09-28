@@ -50,7 +50,7 @@ def get_matching_service() -> MatchingService:
 
 
 def _photo_response(photo: PhotoRecord) -> PhotoResponse:
-    return PhotoResponse(photo_id=photo.id, collection_id=photo.collection_id, original_filename=photo.original_filename, storage_path=photo.storage_path, mime_type=photo.mime_type, file_size=photo.file_size, width=photo.width, height=photo.height, image_format=photo.image_format, created_at=photo.created_at, processing_status=photo.processing_status, face_count=photo.face_count, faces_embedded=photo.faces_embedded, face_processing_error=photo.face_processing_error, source=photo.source, drive_file_id=photo.drive_file_id, drive_folder_id=photo.drive_folder_id)
+    return PhotoResponse(photo_id=photo.id, collection_id=photo.collection_id, original_filename=photo.original_filename, storage_path=photo.storage_path, mime_type=photo.mime_type, file_size=photo.file_size, width=photo.width, height=photo.height, image_format=photo.image_format, created_at=photo.created_at, processing_status=photo.processing_status, face_count=photo.face_count, faces_embedded=photo.faces_embedded, face_processing_error=photo.face_processing_error, source=photo.source, drive_file_id=photo.drive_file_id, drive_folder_id=photo.drive_folder_id, drive_modified_time=photo.drive_modified_time)
 
 
 def _selfie_response(selfie: SelfieRecord) -> SelfieResponse:
