@@ -16,6 +16,14 @@ export function uploadCollectionSelfie(collectionId, file) {
   return request(`/api/collections/${collectionId}/selfie`, { method: 'POST', body })
 }
 
+export function importGoogleDriveFolder(collectionId, folderUrl) {
+  return request(`/api/collections/${collectionId}/import/google-drive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder_url: folderUrl }),
+  })
+}
+
 export function processCollectionSelfie(collectionId) {
   return request(`/api/collections/${collectionId}/process-selfie`, { method: 'POST' })
 }

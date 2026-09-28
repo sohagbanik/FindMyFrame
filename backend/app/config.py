@@ -20,6 +20,8 @@ class Settings:
     cv_device: str = "cpu"
     face_match_strong_threshold: float = 0.55
     face_match_possible_threshold: float = 0.363
+    google_drive_api_key: str | None = None
+    google_drive_api_base_url: str = "https://www.googleapis.com/drive/v3"
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -31,7 +33,8 @@ class Settings:
             raise ValueError("FACE_MATCH thresholds must satisfy 0 <= possible <= strong <= 1")
         return cls(storage_root=storage_root, max_image_size_bytes=max_image_size, allowed_origins=_allowed_origins(),
                    model_root=Path(os.getenv("FINDMYFRAME_MODEL_ROOT", str(PROJECT_ROOT / "backend" / "models"))),
-                   cv_device=os.getenv("FINDMYFRAME_CV_DEVICE", "cpu"), face_match_strong_threshold=strong_threshold, face_match_possible_threshold=possible_threshold)
+                   cv_device=os.getenv("FINDMYFRAME_CV_DEVICE", "cpu"), face_match_strong_threshold=strong_threshold, face_match_possible_threshold=possible_threshold,
+                   google_drive_api_key=os.getenv("GOOGLE_DRIVE_API_KEY"), google_drive_api_base_url=os.getenv("GOOGLE_DRIVE_API_BASE_URL", "https://www.googleapis.com/drive/v3"))
 
 
 settings = Settings.from_environment()

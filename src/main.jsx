@@ -6,7 +6,7 @@ import { MOCK_PHOTOS, SAMPLE_SELFIE } from './data/mockPhotos'
 import { CollectionView, ProcessingView, ResultsView, SelfieView, Viewer } from './views/FlowViews'
 import { ImageWithFallback } from './components/ImageWithFallback'
 import { API_BASE_URL } from './api/client'
-import { createCollection, matchCollection, processCollectionFaces, processCollectionSelfie, uploadCollectionPhotos, uploadCollectionSelfie } from './api/collections'
+import { createCollection, importGoogleDriveFolder, matchCollection, processCollectionFaces, processCollectionSelfie, uploadCollectionPhotos, uploadCollectionSelfie } from './api/collections'
 
 const landingImages = {
   crowd: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=85',
@@ -71,11 +71,12 @@ function App() {
   const [isDemoSession, setIsDemoSession] = useState(true)
   const [realMatches, setRealMatches] = useState([])
   const [matchError, setMatchError] = useState('')
+  const [driveImport, setDriveImport] = useState({ loading: false, error: '', summary: null })
 
   const start = () => setScreen('collection')
   const releaseCollectionAssets = (items) => items.forEach((file) => { if (file.url?.startsWith('blob:')) URL.revokeObjectURL(file.url); if (file.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview) })
   const releaseSelfieAsset = (item) => { if (item?.url?.startsWith('blob:')) URL.revokeObjectURL(item.url) }
-  const reset = () => { releaseCollectionAssets(collection); releaseSelfieAsset(selfie); setScreen('landing'); setCollection([]); setCollectionId(null); setSelfie(null); setViewerIndex(null); setIsDemoSession(true); setRealMatches([]); setMatchError(''); setCollectionUpload({ loading: false, error: '' }); setSelfieUpload({ loading: false, error: '' }) }
+  const reset = () => { releaseCollectionAssets(collection); releaseSelfieAsset(selfie); setScreen('landing'); setCollection([]); setCollectionId(null); setSelfie(null); setViewerIndex(null); setIsDemoSession(true); setRealMatches([]); setMatchError(''); setDriveImport({ loading: false, error: '', summary: null }); setCollectionUpload({ loading: false, error: '' }); setSelfieUpload({ loading: false, error: '' }) }
   const appendCollection = (incoming) => setCollection((current) => [...current, ...incoming.filter((file) => !current.some((existing) => existing.name === file.name && existing.size === file.size))])
   const removeCollectionFile = (id) => setCollection((current) => {
     const file = current.find((item) => item.id === id)
@@ -83,9 +84,9 @@ function App() {
     if (file?.preview?.startsWith('blob:')) URL.revokeObjectURL(file.preview)
     return current.filter((item) => item.id !== id)
   })
-  const clearCollection = () => { releaseCollectionAssets(collection); setCollection([]); setCollectionId(null); setCollectionUpload({ loading: false, error: '' }) }
+  const clearCollection = () => { releaseCollectionAssets(collection); setCollection([]); setCollectionId(null); setDriveImport({ loading: false, error: '', summary: null }); setCollectionUpload({ loading: false, error: '' }) }
   const startOver = () => { clearCollection(); releaseSelfieAsset(selfie); setSelfie(null); setRealMatches([]); setMatchError(''); setSelfieUpload({ loading: false, error: '' }); setScreen('collection') }
-  const useSampleCollection = () => { releaseCollectionAssets(collection); setCollectionId(null); setIsDemoSession(true); setCollectionUpload({ loading: false, error: '' }); setCollection(MOCK_PHOTOS.slice(0, 5).map((photo, index) => ({ id: `sample-${photo.id}`, name: `event-frame-${index + 1}.jpg`, size: 1800000 + index * 170000, url: photo.src, preview: photo.src, isSample: true }))) }
+  const useSampleCollection = () => { releaseCollectionAssets(collection); setCollectionId(null); setIsDemoSession(true); setDriveImport({ loading: false, error: '', summary: null }); setCollectionUpload({ loading: false, error: '' }); setCollection(MOCK_PHOTOS.slice(0, 5).map((photo, index) => ({ id: `sample-${photo.id}`, name: `event-frame-${index + 1}.jpg`, size: 1800000 + index * 170000, url: photo.src, preview: photo.src, isSample: true }))) }
   const useSampleSelfie = () => { releaseSelfieAsset(selfie); setSelfieUpload({ loading: false, error: '' }); setSelfie({ ...SAMPLE_SELFIE, id: 'sample-selfie' }) }
   const setSelfieAndReleasePrevious = (nextSelfie) => { releaseSelfieAsset(selfie); setSelfieUpload({ loading: false, error: '' }); setSelfie(nextSelfie) }
   const continueWithCollection = async () => {
@@ -101,6 +102,19 @@ function App() {
       if (response.photos.length) setScreen('selfie')
     } catch (error) {
       setCollectionUpload({ loading: false, error: error.message || 'Some photos couldn’t be added. Please try again.' })
+    }
+  }
+  const importDriveFolder = async (folderUrl) => {
+    setDriveImport({ loading: true, error: '', summary: null })
+    try {
+      const created = collectionId ? { collection_id: collectionId } : await createCollection()
+      const response = await importGoogleDriveFolder(created.collection_id, folderUrl)
+      setCollectionId(created.collection_id)
+      setIsDemoSession(false)
+      setDriveImport({ loading: false, error: response.failed_count ? `${response.imported_count} photos imported. ${response.failed_count} couldn’t be added.` : '', summary: response })
+      if (response.imported_count > 0 || response.duplicate_count > 0) setScreen('selfie')
+    } catch (error) {
+      setDriveImport({ loading: false, error: error.message || 'We couldn’t import this Drive folder.', summary: null })
     }
   }
   const continueWithSelfie = async () => {
@@ -132,11 +146,11 @@ function App() {
   const viewerItems = isDemoSession ? MOCK_PHOTOS : realMatches
 
   if (screen === 'landing') return <LandingView onStart={start} />
-  if (screen === 'collection') return <CollectionView files={collection} onFiles={appendCollection} onRemove={removeCollectionFile} onClear={clearCollection} onContinue={continueWithCollection} onSample={useSampleCollection} onBack={reset} onHome={reset} isUploading={collectionUpload.loading} errorMessage={collectionUpload.error} />
-  if (screen === 'selfie') return <SelfieView selfie={selfie} onSelfie={setSelfieAndReleasePrevious} onContinue={continueWithSelfie} onBack={() => setScreen('collection')} onHome={reset} onSample={useSampleSelfie} isUploading={selfieUpload.loading} errorMessage={selfieUpload.error} />
+  if (screen === 'collection') return <CollectionView files={collection} onFiles={appendCollection} onRemove={removeCollectionFile} onClear={clearCollection} onContinue={continueWithCollection} onSample={useSampleCollection} onDriveImport={importDriveFolder} onBack={reset} onHome={reset} isUploading={collectionUpload.loading} errorMessage={collectionUpload.error} driveImporting={driveImport.loading} driveError={driveImport.error} />
+  if (screen === 'selfie') return <SelfieView selfie={selfie} onSelfie={setSelfieAndReleasePrevious} onContinue={continueWithSelfie} onBack={() => setScreen('collection')} onHome={reset} onSample={useSampleSelfie} isUploading={selfieUpload.loading} errorMessage={selfieUpload.error} collectionNotice={driveImport.error || collectionUpload.error} />
   if (screen === 'processing') return <ProcessingView onComplete={finishProcessing} onBack={() => setScreen('collection')} onHome={() => setScreen('collection')} collectionId={collectionId} realProcessing={!isDemoSession} onProcessingError={(message) => { setCollectionUpload({ loading: false, error: message }); setScreen('collection') }} />
   if (screen === 'results') return <>
-    <ResultsView isDemo={isDemoSession} matches={realMatches} errorMessage={matchError} onOpen={(photo) => setViewerIndex(viewerItems.findIndex((item) => item.id === photo.id))} onStartOver={startOver} onHome={reset} collectionCount={`${collection.length || 5} photos`} />
+    <ResultsView isDemo={isDemoSession} matches={realMatches} errorMessage={matchError} onOpen={(photo) => setViewerIndex(viewerItems.findIndex((item) => item.id === photo.id))} onStartOver={startOver} onHome={reset} collectionCount={`${((driveImport.summary?.imported_count || 0) + (driveImport.summary?.duplicate_count || 0)) || collection.length || 5} photos`} />
     {viewerIndex !== null && viewerItems[viewerIndex] && <Viewer photo={viewerItems[viewerIndex]} onClose={() => setViewerIndex(null)} onPrevious={() => setViewerIndex((index) => (index - 1 + viewerItems.length) % viewerItems.length)} onNext={() => setViewerIndex((index) => (index + 1) % viewerItems.length)} />}
   </>
 }

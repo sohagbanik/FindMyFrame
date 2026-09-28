@@ -11,6 +11,9 @@ from app.schemas.collections import (
     CreateCollectionResponse,
     FailedUploadResponse,
     FaceProcessingResponse,
+    FailedImportResponse,
+    GoogleDriveImportRequest,
+    GoogleDriveImportResponse,
     MatchResponse,
     MatchResultResponse,
     PhotoResponse,
@@ -21,6 +24,7 @@ from app.services.ingestion_service import IngestionError, IngestionService
 from app.services.face_model import FaceError, SFaceModel
 from app.services.face_service import FaceService
 from app.services.matching_service import MatchingError, MatchingService, PhotoMatch
+from app.integrations.google_drive.service import DriveIntegrationError, GoogleDriveClient, GoogleDriveImportService
 from app.storage.local_storage import LocalStorage
 
 
@@ -30,6 +34,7 @@ storage = LocalStorage(settings.storage_root)
 ingestion_service = IngestionService(settings, repository, storage)
 face_service = FaceService(SFaceModel(settings.model_root, settings.cv_device), settings.storage_root, repository)
 matching_service = MatchingService(settings, repository)
+drive_import_service = GoogleDriveImportService(GoogleDriveClient(settings), ingestion_service)
 
 
 def get_ingestion_service() -> IngestionService:
@@ -45,7 +50,7 @@ def get_matching_service() -> MatchingService:
 
 
 def _photo_response(photo: PhotoRecord) -> PhotoResponse:
-    return PhotoResponse(photo_id=photo.id, collection_id=photo.collection_id, original_filename=photo.original_filename, storage_path=photo.storage_path, mime_type=photo.mime_type, file_size=photo.file_size, width=photo.width, height=photo.height, image_format=photo.image_format, created_at=photo.created_at, processing_status=photo.processing_status, face_count=photo.face_count, faces_embedded=photo.faces_embedded, face_processing_error=photo.face_processing_error)
+    return PhotoResponse(photo_id=photo.id, collection_id=photo.collection_id, original_filename=photo.original_filename, storage_path=photo.storage_path, mime_type=photo.mime_type, file_size=photo.file_size, width=photo.width, height=photo.height, image_format=photo.image_format, created_at=photo.created_at, processing_status=photo.processing_status, face_count=photo.face_count, faces_embedded=photo.faces_embedded, face_processing_error=photo.face_processing_error, source=photo.source, drive_file_id=photo.drive_file_id, drive_folder_id=photo.drive_folder_id)
 
 
 def _selfie_response(selfie: SelfieRecord) -> SelfieResponse:
@@ -62,6 +67,10 @@ def _raise_face_error(error: FaceError) -> None:
 
 
 def _raise_matching_error(error: MatchingError) -> None:
+    raise HTTPException(status_code=error.status, detail={"code": error.code, "message": error.message})
+
+
+def _raise_drive_error(error: DriveIntegrationError) -> None:
     raise HTTPException(status_code=error.status, detail={"code": error.code, "message": error.message})
 
 
@@ -100,6 +109,17 @@ def upload_selfie(collection_id: str, file: UploadFile = File(...), service: Ing
     finally:
         file.file.close()
     return _selfie_response(selfie)
+
+
+@router.post("/{collection_id}/import/google-drive", response_model=GoogleDriveImportResponse)
+def import_google_drive(collection_id: str, request: GoogleDriveImportRequest):
+    if not repository.get_collection(collection_id):
+        _raise_drive_error(DriveIntegrationError("collection_not_found", "That photo collection could not be found.", 404))
+    try:
+        result = drive_import_service.import_folder(collection_id, request.folder_url)
+    except DriveIntegrationError as error:
+        _raise_drive_error(error)
+    return GoogleDriveImportResponse(collection_id=result["collection_id"], source=result["source"], drive_folder_id=result["drive_folder_id"], discovered_count=result["discovered_count"], imported_count=result["imported_count"], duplicate_count=result["duplicate_count"], failed_count=result["failed_count"], failed_files=[FailedImportResponse(**failure) for failure in result["failed_files"]])
 
 
 def _run_face_processing(collection_id: str) -> None:
@@ -161,7 +181,7 @@ def collection_status(collection_id: str, service: IngestionService = Depends(ge
     selfie_status = collection.selfie.processing_status if collection.selfie else None
     photo_faces = sum(photo.face_count for photo in collection.photos)
     embedded_faces = sum(photo.faces_embedded for photo in collection.photos)
-    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces, matching_status=collection.matching_status, match_count=collection.match_count)
+    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces, matching_status=collection.matching_status, match_count=collection.match_count, source=collection.source, drive_folder_id=collection.drive_folder_id)
 
 
 @router.get("/{collection_id}/photos/{photo_id}")

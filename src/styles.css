@@ -197,6 +197,21 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .future-source button { background: none; border: 0; color: #77776f; font-size: 12px; padding: 0; text-align: left; }
 .future-source button span { background: #ddd7cd; color: #929087; font-size: 9px; margin-left: 7px; padding: 4px 6px; text-transform: uppercase; }
 .future-source small { color: #98968e; font-size: 10px; grid-column: 2; margin-top: 7px; }
+.drive-source { border-top: 1px solid var(--line); margin-top: 48px; padding-top: 20px; }
+.drive-source-heading { align-items: baseline; display: flex; justify-content: space-between; }
+.drive-source-heading span { font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.drive-source-heading small { color: var(--muted); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.drive-input-label { color: var(--muted); display: block; font-size: 10px; margin: 17px 0 8px; }
+.drive-input-row { display: flex; gap: 8px; }
+.drive-input-row input { background: transparent; border: 1px solid #b9b4aa; border-radius: 0; color: var(--ink); flex: 1; font-size: 12px; min-width: 0; outline: 0; padding: 13px 14px; }
+.drive-input-row input:focus { border-color: var(--accent); }
+.drive-input-row input::placeholder { color: #a9a69d; }
+.drive-import-button { align-items: center; background: var(--ink); border: 0; color: var(--paper); display: inline-flex; font-size: 11px; gap: 10px; justify-content: center; padding: 0 14px; white-space: nowrap; }
+.drive-import-button:hover:not(:disabled) { background: var(--accent); }
+.drive-import-button:disabled { background: #c5c1b8; color: #eeeae2; cursor: not-allowed; }
+.drive-import-button svg { height: 14px; width: 14px; }
+.drive-note { color: #8d8b82; font-size: 10px; line-height: 1.55; margin: 11px 0 0; }
+.drive-note strong { color: var(--ink); font-weight: 600; }
 .selfie-upload { background: #e8e2d9; border: 1px dashed #aaa79f; min-height: 360px; overflow: hidden; position: relative; transition: background .25s, border-color .25s; }
 .selfie-upload-action { align-items: center; cursor: pointer; display: flex; flex-direction: column; height: 360px; justify-content: center; }
 .selfie-upload-action strong { font-size: 17px; margin: 20px 0 10px; }
@@ -212,6 +227,7 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .selfie-preview-overlay { align-items: center; background: linear-gradient(transparent, rgba(20,21,19,.8)); bottom: 0; color: white; display: flex; font-size: 12px; justify-content: space-between; left: 0; padding: 44px 22px 19px; position: absolute; right: 0; }
 .selfie-preview-overlay label { border-bottom: 1px solid rgba(255,255,255,.7); cursor: pointer; font-size: 11px; padding-bottom: 2px; }
 .inline-privacy { align-items: center; color: #77766f; display: flex; font-size: 10px; gap: 9px; margin: 30px 0 0; }
+.import-summary { color: #77766f; font-size: 11px; line-height: 1.5; margin: 24px 0 -9px; }
 .inline-privacy > span:first-child { align-items: center; background: var(--ink); border-radius: 50%; color: var(--paper); display: flex; height: 23px; justify-content: center; width: 23px; }
 .inline-privacy svg { height: 13px; width: 13px; }
 .inline-privacy strong { color: var(--ink); }
@@ -316,6 +332,9 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
   .collection-preview button { opacity: 1; }
   .flow-actions { align-items: flex-start; flex-direction: column; gap: 8px; }
   .future-source { grid-template-columns: 78px auto; margin-top: 35px; }
+  .drive-source { margin-top: 38px; }
+  .drive-input-row { align-items: stretch; flex-direction: column; }
+  .drive-import-button { min-height: 46px; }
   .selfie-upload, .selfie-upload-action, .selfie-preview-wrap { min-height: 310px; height: 310px; }
   .processing-center { padding-top: 145px; }
   .processing-count, .processing-meter { width: min(86vw, 490px); }

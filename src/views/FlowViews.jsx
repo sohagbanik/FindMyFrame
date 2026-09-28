@@ -54,8 +54,9 @@ function PrivacyNote() {
   return <p className="inline-privacy"><span><LockIcon /></span><span><strong>Private by design.</strong> Your selfie stays scoped to this search.</span></p>
 }
 
-export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome, isUploading = false, errorMessage = '' }) {
+export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome, isUploading = false, errorMessage = '', onDriveImport, driveImporting = false, driveError = '' }) {
   const [dragging, setDragging] = useState(false)
+  const [driveUrl, setDriveUrl] = useState('')
   const inputRef = useRef(null)
 
   const acceptFiles = (incoming) => {
@@ -74,7 +75,7 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
     <div className="aside-number">01 <span>/ 03</span></div>
     <p>Start with the folder you already have. A few photographs or a whole event both work here.</p>
     <div className="aside-line" />
-    <p className="aside-small">Google Drive ingestion is coming soon. For now, local photographs stay on this device.</p>
+    <p className="aside-small">For Drive links, the folder must be accessible to anyone with the link. Private-folder OAuth is coming later.</p>
   </>}>
     <div className={`upload-zone ${dragging ? 'is-dragging' : ''} ${files.length ? 'has-files' : ''}`} aria-busy={isUploading} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); acceptFiles(Array.from(event.dataTransfer.files)) }}>
       <input ref={inputRef} id="collection-upload" className="visually-hidden" type="file" accept="image/*" multiple onChange={(event) => acceptFiles(Array.from(event.target.files))} />
@@ -98,11 +99,17 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
       <button className="primary-button" type="button" disabled={!files.length || isUploading} onClick={onContinue}>{isUploading ? 'Adding photographs…' : 'Continue to selfie'} {!isUploading && <ArrowIcon />}</button>
       {!files.length && <button className="ghost-action" type="button" onClick={onSample}>Try the small demo collection <ArrowIcon /></button>}
     </div>
-    <div className="future-source"><span>Another way</span><button type="button" disabled aria-describedby="drive-note">Google Drive folder <span>soon</span></button><small id="drive-note">Drive access will be added after the local flow is proven.</small></div>
+    <div className="drive-source">
+      <div className="drive-source-heading"><span>Or use Google Drive</span><small>Accessible folder link</small></div>
+      <label className="drive-input-label" htmlFor="drive-folder-url">Paste your event folder link</label>
+      <div className="drive-input-row"><input id="drive-folder-url" type="url" value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="https://drive.google.com/drive/folders/..." autoComplete="off" /><button className="drive-import-button" type="button" disabled={!driveUrl.trim() || driveImporting} onClick={() => onDriveImport?.(driveUrl.trim())}>{driveImporting ? 'Checking…' : 'Import photos'} <ArrowIcon /></button></div>
+      <p className="drive-note">Make sure the folder is shared as <strong>Anyone with the link</strong>. We only read supported image files.</p>
+      {driveError && <p className="upload-error" role="alert">{driveError}</p>}
+    </div>
   </FlowFrame>
 }
 
-export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample, isUploading = false, errorMessage = '' }) {
+export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample, isUploading = false, errorMessage = '', collectionNotice = '' }) {
   const [dragging, setDragging] = useState(false)
   const chooseSelfie = (file) => {
     if (!file || !file.type.startsWith('image/')) return
@@ -124,6 +131,7 @@ export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSam
       <button className="primary-button" type="button" disabled={!selfie || isUploading} onClick={onContinue}>{isUploading ? 'Saving your reference…' : 'Find my moments'} {!isUploading && <ArrowIcon />}</button>
       {!selfie && <button className="ghost-action" type="button" onClick={onSample}>Use a sample selfie <ArrowIcon /></button>}
     </div>
+    {collectionNotice && <p className="import-summary" role="status">{collectionNotice}</p>}
     <PrivacyNote />
   </FlowFrame>
 }

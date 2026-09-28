@@ -45,6 +45,9 @@ class PhotoRecord:
     face_count: int = 0
     faces_embedded: int = 0
     face_processing_error: str | None = None
+    source: str = "local_upload"
+    drive_file_id: str | None = None
+    drive_folder_id: str | None = None
 
 
 @dataclass
@@ -78,3 +81,5 @@ class CollectionRecord:
     face_processing_error_count: int = 0
     matching_status: str = "not_started"
     match_count: int = 0
+    source: str = "local_upload"
+    drive_folder_id: str | None = None

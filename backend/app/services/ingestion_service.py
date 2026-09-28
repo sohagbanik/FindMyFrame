@@ -73,5 +73,27 @@ class IngestionService:
         self.repository.save_collection(collection)
         return selfie
 
+    def ingest_drive_photo(self, collection_id: str, drive_file_id: str, drive_folder_id: str, filename: str, content_type: str | None, source: BinaryIO) -> tuple[PhotoRecord, bool]:
+        collection = self._collection_or_raise(collection_id)
+        existing = next((photo for photo in collection.photos if photo.drive_file_id == drive_file_id), None)
+        if existing:
+            return existing, True
+        collection.source = "google_drive"
+        collection.drive_folder_id = drive_folder_id
+        collection.status = CollectionStatus.UPLOADING
+        self.repository.save_collection(collection)
+        try:
+            relative_path, _, file_size, metadata = self._save_and_validate(collection_id, "photos", filename, content_type, source)
+        except IngestionError:
+            collection.failed_photo_count += 1
+            collection.status = CollectionStatus.READY if collection.photos else CollectionStatus.FAILED
+            self.repository.save_collection(collection)
+            raise
+        photo = PhotoRecord(id=uuid.uuid4().hex, collection_id=collection_id, original_filename=filename or "drive-upload", storage_path=relative_path, mime_type=metadata.mime_type, file_size=file_size, width=metadata.width, height=metadata.height, image_format=metadata.image_format, created_at=datetime.now(timezone.utc), source="google_drive", drive_file_id=drive_file_id, drive_folder_id=drive_folder_id)
+        collection.photos.append(photo)
+        collection.status = CollectionStatus.READY
+        self.repository.save_collection(collection)
+        return photo, False
+
     def get_collection(self, collection_id: str) -> CollectionRecord:
         return self._collection_or_raise(collection_id)

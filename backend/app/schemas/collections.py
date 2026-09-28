@@ -25,6 +25,9 @@ class PhotoResponse(BaseModel):
     face_count: int = 0
     faces_embedded: int = 0
     face_processing_error: str | None = None
+    source: str = "local_upload"
+    drive_file_id: str | None = None
+    drive_folder_id: str | None = None
 
 
 class FailedUploadResponse(BaseModel):
@@ -70,6 +73,8 @@ class CollectionStatusResponse(BaseModel):
     faces_embedded: int = 0
     matching_status: str = "not_started"
     match_count: int = 0
+    source: str = "local_upload"
+    drive_folder_id: str | None = None
 
 
 class FaceProcessingResponse(BaseModel):
@@ -99,3 +104,24 @@ class MatchResponse(BaseModel):
     match_count: int
     strong_match_count: int
     possible_match_count: int
+
+
+class GoogleDriveImportRequest(BaseModel):
+    folder_url: str
+
+
+class FailedImportResponse(BaseModel):
+    filename: str
+    code: str
+    message: str
+
+
+class GoogleDriveImportResponse(BaseModel):
+    collection_id: str
+    source: str
+    drive_folder_id: str
+    discovered_count: int
+    imported_count: int
+    duplicate_count: int
+    failed_count: int
+    failed_files: list[FailedImportResponse] = Field(default_factory=list)

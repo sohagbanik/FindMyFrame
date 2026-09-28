@@ -45,6 +45,7 @@ The API exposes:
 | POST | `/api/collections/{id}/process-selfie` | Detect exactly one face and embed the selfie |
 | POST | `/api/collections/{id}/match` | Rank real photo matches by embedding similarity |
 | GET | `/api/collections/{id}/photos/{photo_id}` | Controlled image retrieval for a collection photo |
+| POST | `/api/collections/{id}/import/google-drive` | Import link-accessible Drive folder images |
 | GET | `/api/collections/{id}` | Read collection and ingestion status |
 
 Uploaded originals are kept outside Git under `backend/runtime/collections/<collection_id>/`. Metadata is stored in `backend/runtime/collections.json` for development. The storage and repository adapters are deliberately replaceable with S3/Supabase and PostgreSQL later.
@@ -81,9 +82,15 @@ For event photos, no-face images are valid and continue through the batch. Small
 
 `FACE_MATCH_STRONG_THRESHOLD` and `FACE_MATCH_POSSIBLE_THRESHOLD` are initial development values, not universally valid biometric boundaries. They must be calibrated empirically against representative event data before production use. The current matcher compares normalized 128-dimensional vectors with cosine similarity, keeps the best face score per photo, and never returns raw embeddings to the frontend.
 
+### Google Drive folder links
+
+The MVP accepts a Google Drive folder URL such as `https://drive.google.com/drive/folders/FOLDER_ID`. The folder must be accessible to anyone with the link, and the backend needs a Google Drive API key with the Drive API enabled. Set `GOOGLE_DRIVE_API_KEY` in the backend environment; never expose it to the frontend or commit it.
+
+The importer uses the official Drive API, paginates image discovery, supports JPEG/PNG/WEBP, downloads bytes through the existing ingestion/validation/storage path, and deduplicates repeated imports with Drive file IDs. OAuth/private-folder access, Drive subfolder traversal, and Google account linking are intentionally not implemented.
+
 ## Current limitations
 
-- Authentication and Google Drive are not implemented.
+- Authentication and private-folder Google Drive OAuth are not implemented.
 - The existing processing/results screens still use the frontend demo path when a sample collection is selected.
 - Real local image uploads are sent to the FastAPI ingestion endpoints when the backend is running.
 - Invalid or oversized files are rejected with structured JSON errors; mixed uploads return successful photos plus `failed_files`.
