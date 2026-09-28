@@ -76,7 +76,7 @@ Real results
 
 The model runs during inference only. Face boxes, detector confidence, native embedding vectors, model checksums, and processing state stay backend-side. The same SFace model processes event faces and the selfie. No names, identity profiles, third-party AI APIs, vector search, or final matching are implemented yet.
 
-For event photos, no-face images are valid and continue through the batch. Small faces are recorded without an embedding; image/model errors are attached to that photo rather than aborting the whole collection. Selfies require exactly one usable face and return structured errors for zero or multiple faces.
+For event photos, no-face images are valid and continue through the batch. Small faces are recorded without an embedding; image/model errors are attached to that photo rather than aborting the whole collection. Reference photos require exactly one usable face and return structured errors for zero or multiple faces.
 
 ### Matching thresholds
 
@@ -87,6 +87,8 @@ For event photos, no-face images are valid and continue through the batch. Small
 The MVP accepts a Google Drive folder URL such as `https://drive.google.com/drive/folders/FOLDER_ID`. The folder must be accessible to anyone with the link, and the backend needs a Google Drive API key with the Drive API enabled. Set `GOOGLE_DRIVE_API_KEY` in the backend environment; never expose it to the frontend or commit it.
 
 The importer uses the official Drive API, paginates image discovery, requests `resourceKey`, `modifiedTime`, and `capabilities.canDownload`, sends documented `X-Goog-Drive-Resource-Keys` headers when keys are available, supports JPEG/PNG/WEBP, downloads bytes through the existing ingestion/validation/storage path, and deduplicates repeated imports with Drive file IDs. A folder can be listable while individual file bytes remain non-downloadable to an API-key-only client; those files are reported individually instead of failing the whole import. OAuth/private-folder access, Drive subfolder traversal, and Google account linking are intentionally not implemented.
+
+Drive imports run in the background after the link is submitted. The app polls the collection status and shows discovered, processed, imported, duplicate, and skipped counts; the reference-photo step can be completed while the import continues. A reference photo does not have to be a live selfie, but it should contain one clear, usable face.
 
 ## Current limitations
 

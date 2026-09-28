@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from http.client import IncompleteRead
 import json
 import re
+from time import monotonic
 from typing import BinaryIO, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -151,22 +153,98 @@ class GoogleDriveClient:
             raise DriveIntegrationError("drive_unavailable", "Google Drive is unavailable right now. Try again shortly.", 502) from None
 
 
+class ProgressReader:
+    """Count actual bytes read, publishing at most once a second per file."""
+    def __init__(self, source: BinaryIO, publish):
+        self.source, self.publish = source, publish
+        self.total = 0
+        self.updated = 0.0
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = self.source.read(size)
+        self.total += len(chunk)
+        now = monotonic()
+        if not chunk or now - self.updated >= 1:
+            self.publish(self.total)
+            self.updated = now
+        return chunk
+
+
 class GoogleDriveImportService:
     def __init__(self, client: GoogleDriveClient, ingestion: IngestionService):
         self.client = client
         self.ingestion = ingestion
 
+    def begin_import(self, collection_id: str, folder_url: str):
+        folder_id = self.client.extract_folder_id(folder_url)
+        if not self.client.settings.google_drive_api_key:
+            raise DriveIntegrationError("drive_not_configured", "Google Drive import is not configured on this server yet.", 503)
+        started = False
+
+        def claim(collection):
+            nonlocal started
+            if collection.drive_import_status in {"discovering", "processing"}:
+                if collection.drive_folder_id != folder_id:
+                    raise DriveIntegrationError("drive_import_busy", "Wait for the current folder import before adding another.", 409)
+                return
+            if collection.face_processing_status == "processing":
+                raise DriveIntegrationError("collection_busy", "Wait for the current search to finish before importing again.", 409)
+            collection.source = "google_drive"
+            collection.drive_folder_id = folder_id
+            collection.drive_import_status = "discovering"
+            collection.drive_discovered_count = collection.drive_processed_count = 0
+            collection.drive_imported_count = collection.drive_duplicate_count = collection.drive_failed_count = 0
+            collection.drive_failed_files = []
+            collection.drive_import_error = collection.drive_current_file = None
+            collection.drive_current_bytes = 0
+            collection.drive_current_size = None
+            started = True
+
+        collection = self.ingestion.repository.update_collection(collection_id, claim)
+        return collection, started
+
+    def _update(self, collection_id: str, **changes):
+        def mutate(collection):
+            for key, value in changes.items():
+                setattr(collection, key, value)
+        return self.ingestion.repository.update_collection(collection_id, mutate)
+
     def import_folder(self, collection_id: str, folder_url: str) -> dict:
         folder_id = self.client.extract_folder_id(folder_url)
         folder_resource_key = self.client.extract_folder_resource_key(folder_url)
         discovered = imported = duplicates = 0
+        processed = 0
         failures: list[dict[str, str]] = []
+        # Finish paginated discovery first so the download percentage has a stable denominator.
+        files = []
         for drive_file in self.client.list_images(folder_id, folder_resource_key):
+            files.append(drive_file)
             discovered += 1
+            if discovered % 100 == 0:
+                self._update(collection_id, drive_discovered_count=discovered)
+        self._update(collection_id, drive_discovered_count=discovered, drive_import_status="processing")
+        if not files:
+            raise DriveIntegrationError("drive_no_images", "No accessible JPG, PNG or WEBP images were found directly in this folder.")
+
+        def save_progress() -> None:
+            self._update(collection_id, drive_processed_count=processed,
+                         drive_imported_count=imported, drive_duplicate_count=duplicates,
+                         drive_failed_count=len(failures), drive_failed_files=list(failures))
+
+        for drive_file in files:
+            self._update(collection_id, drive_current_file=drive_file.name,
+                         drive_current_bytes=0, drive_current_size=drive_file.size)
             try:
+                existing = self.ingestion.get_collection(collection_id)
+                if any(photo.drive_file_id == drive_file.file_id for photo in existing.photos):
+                    duplicates += 1
+                    continue
+                if drive_file.size and drive_file.size > self.ingestion.settings.max_image_size_bytes:
+                    raise IngestionError("file_too_large", f"This photo exceeds the {self.ingestion.settings.max_image_size_bytes // (1024 * 1024)} MB per-file limit.")
                 resource_key = drive_file.resource_key or drive_file.shortcut_target_resource_key
                 with self.client.download_file(drive_file.file_id, resource_key, folder_id=folder_id, folder_resource_key=folder_resource_key, can_download=drive_file.can_download) as content:
-                    _, duplicate = self.ingestion.ingest_drive_photo(collection_id, drive_file.file_id, folder_id, drive_file.name, drive_file.mime_type, content, drive_file.modified_time)
+                    reader = ProgressReader(content, lambda size: self._update(collection_id, drive_current_bytes=size))
+                    _, duplicate = self.ingestion.ingest_drive_photo(collection_id, drive_file.file_id, folder_id, drive_file.name, drive_file.mime_type, reader, drive_file.modified_time)
                 if duplicate:
                     duplicates += 1
                 else:
@@ -175,9 +253,30 @@ class GoogleDriveImportService:
                 failures.append({"filename": drive_file.name, "code": error.code, "message": error.message})
             except DriveIntegrationError as error:
                 failures.append({"filename": drive_file.name, "code": error.code, "message": error.message})
+            except (OSError, IncompleteRead):
+                failures.append({"filename": drive_file.name, "code": "drive_transfer_failed", "message": "The download or local save was interrupted. Retry this import."})
+            finally:
+                processed += 1
+                save_progress()
         collection = self.ingestion.get_collection(collection_id)
         collection.source = "google_drive"
         collection.drive_folder_id = folder_id
+        collection.drive_import_status = "complete" if not failures else "complete_with_errors"
+        collection.drive_discovered_count = discovered
+        collection.drive_processed_count = processed
+        collection.drive_imported_count = imported
+        collection.drive_duplicate_count = duplicates
+        collection.drive_failed_count = len(failures)
+        failure_codes = {failure["code"] for failure in failures}
+        if failure_codes & {"drive_file_download_disabled", "drive_file_additional_access", "drive_file_inaccessible", "drive_file_not_downloadable"}:
+            collection.drive_import_error = "Some files were found, but Google Drive did not allow their content to be downloaded."
+        elif failures:
+            collection.drive_import_error = "Some files could not be imported from Google Drive."
+        else:
+            collection.drive_import_error = None
+        collection.drive_current_file = None
+        collection.drive_current_bytes = 0
+        collection.drive_current_size = None
         collection.status = CollectionStatus.READY if collection.photos else CollectionStatus.FAILED
         self.ingestion.repository.save_collection(collection)
-        return {"collection_id": collection_id, "source": "google_drive", "drive_folder_id": folder_id, "discovered_count": discovered, "imported_count": imported, "duplicate_count": duplicates, "failed_count": len(failures), "failed_files": failures}
+        return {"collection_id": collection_id, "source": "google_drive", "drive_folder_id": folder_id, "discovered_count": discovered, "processed_count": processed, "imported_count": imported, "duplicate_count": duplicates, "failed_count": len(failures), "failed_files": failures, "status": collection.drive_import_status}

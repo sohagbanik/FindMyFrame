@@ -80,7 +80,20 @@ class CollectionRecord:
     face_records: list[object] = field(default_factory=list)
     face_processing_status: str = "not_started"
     face_processing_error_count: int = 0
+    photos_processed: int = 0
+    photos_processing_failed: int = 0
     matching_status: str = "not_started"
     match_count: int = 0
     source: str = "local_upload"
     drive_folder_id: str | None = None
+    drive_import_status: str = "not_started"
+    drive_discovered_count: int = 0
+    drive_processed_count: int = 0
+    drive_imported_count: int = 0
+    drive_duplicate_count: int = 0
+    drive_failed_count: int = 0
+    drive_import_error: str | None = None
+    drive_failed_files: list[dict[str, str]] = field(default_factory=list)
+    drive_current_file: str | None = None
+    drive_current_bytes: int = 0
+    drive_current_size: int | None = None

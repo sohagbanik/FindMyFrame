@@ -212,6 +212,16 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .drive-import-button svg { height: 14px; width: 14px; }
 .drive-note { color: #8d8b82; font-size: 10px; line-height: 1.55; margin: 11px 0 0; }
 .drive-note strong { color: var(--ink); font-weight: 600; }
+.drive-progress { background: #e8e2d9; margin-top: 20px; padding: 15px 16px 14px; }
+.drive-progress-heading, .drive-progress-count { align-items: baseline; display: flex; justify-content: space-between; }
+.drive-progress-heading { font-size: 11px; }
+.drive-progress-heading span { color: var(--accent); font-weight: 700; }
+.drive-progress-track { background: #d3cdc3; height: 8px; margin-top: 10px; overflow: hidden; }
+.drive-progress-track span { background: var(--accent); display: block; height: 100%; transition: width .25s ease; }
+.drive-progress-count { color: var(--muted); font-size: 10px; gap: 12px; margin-top: 8px; }
+.drive-progress-count span:last-child { text-align: right; }
+.drive-progress-current { color: #77766f; font-size: 10px; margin: 9px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-progress-error { color: #6c3e32; font-size: 10px; line-height: 1.45; margin: 10px 0 0; }
 .selfie-upload { background: #e8e2d9; border: 1px dashed #aaa79f; min-height: 360px; overflow: hidden; position: relative; transition: background .25s, border-color .25s; }
 .selfie-upload-action { align-items: center; cursor: pointer; display: flex; flex-direction: column; height: 360px; justify-content: center; }
 .selfie-upload-action strong { font-size: 17px; margin: 20px 0 10px; }
@@ -228,6 +238,7 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
 .selfie-preview-overlay label { border-bottom: 1px solid rgba(255,255,255,.7); cursor: pointer; font-size: 11px; padding-bottom: 2px; }
 .inline-privacy { align-items: center; color: #77766f; display: flex; font-size: 10px; gap: 9px; margin: 30px 0 0; }
 .import-summary { color: #77766f; font-size: 11px; line-height: 1.5; margin: 24px 0 -9px; }
+.selfie-upload ~ .drive-progress { margin-top: 26px; }
 .inline-privacy > span:first-child { align-items: center; background: var(--ink); border-radius: 50%; color: var(--paper); display: flex; height: 23px; justify-content: center; width: 23px; }
 .inline-privacy svg { height: 13px; width: 13px; }
 .inline-privacy strong { color: var(--ink); }
@@ -335,6 +346,8 @@ h2 { font-size: clamp(43px, 5vw, 74px); }
   .drive-source { margin-top: 38px; }
   .drive-input-row { align-items: stretch; flex-direction: column; }
   .drive-import-button { min-height: 46px; }
+  .drive-progress-count { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .drive-progress-count span:last-child { text-align: left; }
   .selfie-upload, .selfie-upload-action, .selfie-preview-wrap { min-height: 310px; height: 310px; }
   .processing-center { padding-top: 145px; }
   .processing-count, .processing-meter { width: min(86vw, 490px); }

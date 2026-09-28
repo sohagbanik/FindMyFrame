@@ -4,12 +4,29 @@ import { ArrowIcon, BackIcon, CloseIcon, DownloadIcon, LockIcon, PlusIcon, Share
 import { ImageWithFallback } from '../components/ImageWithFallback'
 import { getCollectionStatus } from '../api/collections'
 
-const steps = ['Collection', 'Selfie', 'Your moments']
+const steps = ['Collection', 'Reference photo', 'Your moments']
 
 function formatBytes(bytes) {
   if (!bytes) return '0 KB'
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function DriveImportProgress({ progress }) {
+  if (!progress || progress.status === 'not_started') return null
+  const complete = progress.status === 'complete' || progress.status === 'complete_with_errors'
+  const failed = progress.status === 'failed'
+  const discovered = progress.discovered || 0
+  const processed = progress.processed || 0
+  const percent = complete ? 100 : discovered ? Math.min(99, Math.round((processed / discovered) * 100)) : progress.status === 'starting' ? 2 : 4
+  const label = failed ? 'Drive import stopped' : complete ? 'Drive import complete' : progress.status === 'starting' ? 'Starting Drive import…' : progress.status === 'discovering' ? 'Finding Drive photos…' : 'Importing Drive photos…'
+  return <div className="drive-progress" role="status" aria-live="polite">
+    <div className="drive-progress-heading"><strong>{label}</strong><span>{percent}%</span></div>
+    <div className="drive-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent} aria-label="Google Drive import progress"><span style={{ width: `${percent}%` }} /></div>
+    <div className="drive-progress-count"><span>{processed.toLocaleString()} of {discovered.toLocaleString()} files processed</span><span>{progress.imported || 0} imported · {progress.duplicates || 0} already added · {progress.failed || 0} skipped</span></div>
+    {progress.currentFile && !complete && <p className="drive-progress-current">{progress.currentFile}{progress.currentSize ? ` · ${formatBytes(progress.currentBytes || 0)} / ${formatBytes(progress.currentSize)}` : ''}</p>}
+    {progress.error && <p className="drive-progress-error">{progress.error}</p>}
+  </div>
 }
 
 function Wordmark() {
@@ -51,10 +68,10 @@ function FlowFrame({ current, eyebrow, title, copy, onBack, onHome, children, as
 }
 
 function PrivacyNote() {
-  return <p className="inline-privacy"><span><LockIcon /></span><span><strong>Private by design.</strong> Your selfie stays scoped to this search.</span></p>
+  return <p className="inline-privacy"><span><LockIcon /></span><span><strong>Private by design.</strong> Your reference photo stays scoped to this search.</span></p>
 }
 
-export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome, isUploading = false, errorMessage = '', onDriveImport, driveImporting = false, driveError = '' }) {
+export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, onSample, onBack, onHome, isUploading = false, errorMessage = '', onDriveImport, driveImporting = false, driveError = '', driveProgress = null }) {
   const [dragging, setDragging] = useState(false)
   const [driveUrl, setDriveUrl] = useState('')
   const inputRef = useRef(null)
@@ -81,10 +98,10 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
       <input ref={inputRef} id="collection-upload" className="visually-hidden" type="file" accept="image/*" multiple onChange={(event) => acceptFiles(Array.from(event.target.files))} />
       <label className="upload-zone-action" htmlFor="collection-upload">
         <span className="upload-plus"><PlusIcon /></span>
-        <strong>{files.length ? 'Add more photographs' : 'Drop your photographs here'}</strong>
+        <strong>{files.length ? 'Add more photographs' : 'Drop local photographs here'}</strong>
         <span>or <u>choose from this device</u></span>
       </label>
-      <span className="upload-format">JPG, PNG or WEBP · multiple files welcome</span>
+      <span className="upload-format">Local JPG, PNG or WEBP · multiple files welcome</span>
     </div>
 
     {files.length > 0 && <div className="collection-summary">
@@ -96,41 +113,43 @@ export function CollectionView({ files, onFiles, onRemove, onClear, onContinue, 
 
     {errorMessage && <p className="upload-error" role="alert">{errorMessage}</p>}
     <div className="flow-actions">
-      <button className="primary-button" type="button" disabled={!files.length || isUploading} onClick={onContinue}>{isUploading ? 'Adding photographs…' : 'Continue to selfie'} {!isUploading && <ArrowIcon />}</button>
+      <button className="primary-button" type="button" disabled={!files.length || isUploading} onClick={onContinue}>{isUploading ? 'Adding photographs…' : 'Continue to reference photo'} {!isUploading && <ArrowIcon />}</button>
       {!files.length && <button className="ghost-action" type="button" onClick={onSample}>Try the small demo collection <ArrowIcon /></button>}
     </div>
     <div className="drive-source">
       <div className="drive-source-heading"><span>Or use Google Drive</span><small>Accessible folder link</small></div>
       <label className="drive-input-label" htmlFor="drive-folder-url">Paste your event folder link</label>
-      <div className="drive-input-row"><input id="drive-folder-url" type="url" value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="https://drive.google.com/drive/folders/..." autoComplete="off" /><button className="drive-import-button" type="button" disabled={!driveUrl.trim() || driveImporting} onClick={() => onDriveImport?.(driveUrl.trim())}>{driveImporting ? 'Checking…' : 'Import photos'} <ArrowIcon /></button></div>
+      <div className="drive-input-row"><input id="drive-folder-url" type="url" value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="https://drive.google.com/drive/folders/..." autoComplete="off" /><button className="drive-import-button" type="button" disabled={!driveUrl.trim() || driveImporting} onClick={() => onDriveImport?.(driveUrl.trim())}>{driveImporting ? 'Importing…' : 'Import photos'} <ArrowIcon /></button></div>
       <p className="drive-note">Make sure the folder is shared as <strong>Anyone with the link</strong>. We only read supported image files.</p>
-      {driveError && <p className="upload-error" role="alert">{driveError}</p>}
+      <DriveImportProgress progress={driveProgress} />
+      {driveError && (!driveProgress || driveProgress.status === 'not_started') && <p className="upload-error" role="alert">{driveError}</p>}
     </div>
   </FlowFrame>
 }
 
-export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample, isUploading = false, errorMessage = '', collectionNotice = '' }) {
+export function SelfieView({ selfie, onSelfie, onContinue, onBack, onHome, onSample, isUploading = false, errorMessage = '', collectionNotice = '', driveProgress = null }) {
   const [dragging, setDragging] = useState(false)
   const chooseSelfie = (file) => {
     if (!file || !file.type.startsWith('image/')) return
     onSelfie({ id: `${file.name}-${file.lastModified}`, name: file.name, size: file.size, file, url: URL.createObjectURL(file) })
   }
 
-  return <FlowFrame current={1} eyebrow="step two / the reference" title={<>Find<br /><em>yourself.</em></>} copy="Upload a clear photo of yourself. We’ll use it to find the moments you’re in." onBack={onBack} onHome={onHome} aside={<>
+  return <FlowFrame current={1} eyebrow="step two / the reference" title={<>Find<br /><em>yourself.</em></>} copy="Upload a clear reference photo of yourself. We’ll use it to find the moments you’re in." onBack={onBack} onHome={onHome} aside={<>
     <div className="aside-number">02 <span>/ 03</span></div>
-    <p>A simple, front-facing selfie works best. No name, email, or account needed.</p>
+    <p>A clear, front-facing reference photo works best. No name, email, or account needed.</p>
     <div className="aside-line" />
     <p className="aside-small">We don’t need to build a permanent profile of you to find one event.</p>
   </>}>
     <div className={`selfie-upload ${dragging ? 'is-dragging' : ''} ${selfie ? 'has-selfie' : ''}`} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); chooseSelfie(event.dataTransfer.files[0]) }}>
-      <input id="selfie-upload" className="visually-hidden" type="file" accept="image/*" capture="user" onChange={(event) => chooseSelfie(event.target.files[0])} />
-      {selfie ? <div className="selfie-preview-wrap"><ImageWithFallback src={selfie.url} alt="Your reference selfie" /><div className="selfie-preview-overlay"><span>Ready to look</span><label htmlFor="selfie-upload">Replace photo</label></div></div> : <label className="selfie-upload-action" htmlFor="selfie-upload"><span className="selfie-frame-icon"><span /></span><strong>Drop your selfie here</strong><span>or <u>take a photo</u> on your phone</span></label>}
+      <input id="selfie-upload" className="visually-hidden" type="file" accept="image/*" onChange={(event) => chooseSelfie(event.target.files[0])} />
+      {selfie ? <div className="selfie-preview-wrap"><ImageWithFallback src={selfie.url} alt="Your reference photo" /><div className="selfie-preview-overlay"><span>Ready to look</span><label htmlFor="selfie-upload">Replace photo</label></div></div> : <label className="selfie-upload-action" htmlFor="selfie-upload"><span className="selfie-frame-icon"><span /></span><strong>Drop your reference photo here</strong><span>or <u>choose a photo</u> from this device</span></label>}
     </div>
     {errorMessage && <p className="upload-error" role="alert">{errorMessage}</p>}
     <div className="flow-actions">
-      <button className="primary-button" type="button" disabled={!selfie || isUploading} onClick={onContinue}>{isUploading ? 'Saving your reference…' : 'Find my moments'} {!isUploading && <ArrowIcon />}</button>
-      {!selfie && <button className="ghost-action" type="button" onClick={onSample}>Use a sample selfie <ArrowIcon /></button>}
+      <button className="primary-button" type="button" disabled={!selfie || isUploading} onClick={onContinue}>{isUploading ? 'Preparing your search…' : 'Find my moments'} {!isUploading && <ArrowIcon />}</button>
+      {!selfie && <button className="ghost-action" type="button" onClick={onSample}>Use a sample reference photo <ArrowIcon /></button>}
     </div>
+    <DriveImportProgress progress={driveProgress} />
     {collectionNotice && <p className="import-summary" role="status">{collectionNotice}</p>}
     <PrivacyNote />
   </FlowFrame>
@@ -160,8 +179,10 @@ export function ProcessingView({ onComplete, photoCount = 4283, onBack, onHome, 
             onProcessingError?.('We couldn’t finish looking through this collection. You can try the search again.')
             return
           }
+          const processed = (status.photos_processed || 0) + (status.photos_processing_failed || 0)
+          const measuredProgress = status.photo_count ? Math.min(99, (processed / status.photo_count) * 100) : 0
           const elapsedProgress = Math.min(93, ((performance.now() - started) / 9000) * 93)
-          setProgress((current) => Math.max(current, elapsedProgress))
+          setProgress((current) => Math.max(current, measuredProgress || elapsedProgress))
           pollTimer = window.setTimeout(poll, 800)
         } catch (error) {
           if (!cancelled) onProcessingError?.(error.message || 'We couldn’t read the processing status.')
@@ -231,7 +252,7 @@ export function ResultsView({ onOpen, onStartOver, collectionCount, onHome, isDe
       <div className="results-actions"><button className="outline-action" type="button" onClick={share}><ShareIcon /> Share</button><button className="outline-action" type="button" disabled={!selected.length} onClick={() => setNotice(`${selected.length} selected ${selected.length === 1 ? 'photo is' : 'photos are'} ready to download.`)}><DownloadIcon /> Download {selected.length ? `(${selected.length})` : 'selected'}</button></div>
     </section>
     {notice && <p className="results-notice" role="status">{notice}</p>}
-    {isDemo ? <><div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div><section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section><div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div></> : hasMatches ? <><div className="results-rule"><span>Similarity ranked</span><span>{possibleMatches ? `${possibleMatches} possible match${possibleMatches === 1 ? '' : 'es'}` : 'Strong matches only'}</span></div><section className="photo-gallery" aria-label="Your matched photographs">{matches.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section></> : <div className="index-ready-empty"><span className="empty-orbit" aria-hidden="true" /><h2>We looked carefully.<br /><em>Nothing confident.</em></h2><p>{errorMessage || 'We couldn’t find a face in this collection that crossed the development threshold. Try another selfie or collection.'}</p></div>}
+    {isDemo ? <><div className="results-rule"><span>Strong matches</span><span>Showing 9 preview frames · demo collection</span></div><section className="photo-gallery" aria-label="Your matched photographs">{MOCK_PHOTOS.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section><div className="possible-matches"><span className="possible-mark">+</span><div><strong>6 possible matches</strong><span>A few frames might be you. We’ll make these confirmable when matching is connected.</span></div><button type="button" onClick={() => setNotice('Possible matches will be available in the matching phase.')}>Review later <ArrowIcon /></button></div></> : hasMatches ? <><div className="results-rule"><span>Similarity ranked</span><span>{possibleMatches ? `${possibleMatches} possible match${possibleMatches === 1 ? '' : 'es'}` : 'Strong matches only'}</span></div><section className="photo-gallery" aria-label="Your matched photographs">{matches.map((photo, index) => <PhotoCard key={photo.id} photo={photo} index={index} selected={selected.includes(photo.id)} onSelect={toggleSelected} onOpen={onOpen} />)}</section></> : <div className="index-ready-empty"><span className="empty-orbit" aria-hidden="true" /><h2>We looked carefully.<br /><em>Nothing confident.</em></h2><p>{errorMessage || 'We couldn’t find a face in this collection that crossed the development threshold. Try another reference photo or collection.'}</p></div>}
     <footer className="results-footer"><button className="text-action" type="button" onClick={onStartOver}>Start a new search</button><PrivacyNote /></footer>
   </main>
 }

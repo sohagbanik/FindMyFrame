@@ -54,15 +54,15 @@ class FaceService:
         image = load_image(self.storage_root / selfie.storage_path)
         detections = self.model.detect(image)
         if not detections:
-            raise FaceError("no_face", "We couldn't detect a face in this selfie. Try a clearer photo.")
+            raise FaceError("no_face", "We couldn't detect a face in this reference photo. Try a clearer photo.")
         if len(detections) != 1:
-            raise FaceError("multiple_faces", "Please use a selfie with one clear face.")
+            raise FaceError("multiple_faces", "Please use a reference photo with one clear face.")
         if not detections[0].usable:
-            raise FaceError("face_too_small", "Your face is too small in this selfie. Try moving closer.")
+            raise FaceError("face_too_small", "Your face is too small in this reference photo. Try moving closer.")
         records = self._face_records(collection.id, selfie.id, "selfie", image, detections)
         record = records[0]
         if record.embedding_status != "complete":
-            raise FaceError("embedding_failed", "We couldn't prepare this selfie. Try another clear photo.")
+            raise FaceError("embedding_failed", "We couldn't prepare this reference photo. Try another clear photo.")
         selfie.face_count = 1
         selfie.faces_embedded = 1
         selfie.face_processing_error = None
@@ -76,6 +76,8 @@ class FaceService:
         collection.face_processing_status = "processing"
         collection.status = CollectionStatus.PROCESSING
         collection.face_processing_error_count = 0
+        collection.photos_processed = 0
+        collection.photos_processing_failed = 0
         collection.face_records = [face for face in collection.face_records if getattr(face, "source_kind", None) != "photo"]
         self.repository.save_collection(collection)
         photos_processed = photos_failed = 0
@@ -87,6 +89,7 @@ class FaceService:
                 records = self.process_photo(collection, photo)
                 collection.face_records.extend(records)
                 photos_processed += 1
+                collection.photos_processed = photos_processed
                 faces_detected += photo.face_count
                 faces_embedded += photo.faces_embedded
             except (FaceError, OSError, ValueError):
@@ -94,6 +97,7 @@ class FaceService:
                 photo.face_processing_error = "image_processing_failed"
                 collection.face_processing_error_count += 1
                 photos_failed += 1
+                collection.photos_processing_failed = photos_failed
             finally:
                 self.repository.save_collection(collection)
         collection.face_processing_status = "complete" if photos_failed == 0 else "complete_with_errors"
@@ -115,7 +119,7 @@ class FaceService:
         if not collection:
             raise FaceError("collection_not_found", "That photo collection could not be found.", 404)
         if not collection.selfie:
-            raise FaceError("selfie_missing", "Upload a selfie before processing it.", 400)
+            raise FaceError("selfie_missing", "Upload a reference photo before processing it.", 400)
         selfie = collection.selfie
         selfie.processing_status = SelfieStatus.PROCESSING
         self.repository.save_collection(collection)

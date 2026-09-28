@@ -1,9 +1,9 @@
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from datetime import datetime
 import json
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 from app.models.entities import (
     CollectionRecord,
@@ -58,13 +58,15 @@ class JsonRepository:
 
     @staticmethod
     def _dict_to_record(data: dict[str, Any]) -> CollectionRecord:
-        photos = [PhotoRecord(**{**item, "created_at": datetime.fromisoformat(item["created_at"]), "processing_status": PhotoStatus(item["processing_status"])}) for item in data.get("photos", [])]
+        photo_fields = {field.name for field in fields(PhotoRecord)}
+        photos = [PhotoRecord(**{key: value for key, value in {**item, "created_at": datetime.fromisoformat(item["created_at"]), "processing_status": PhotoStatus(item["processing_status"])}.items() if key in photo_fields}) for item in data.get("photos", [])]
         selfie_data = data.get("selfie")
         selfie = None
         if selfie_data:
             selfie = SelfieRecord(**{**selfie_data, "created_at": datetime.fromisoformat(selfie_data["created_at"]), "processing_status": SelfieStatus(selfie_data["processing_status"])})
         faces = [FaceRecord.model_validate(item) for item in data.get("face_records", [])]
-        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0), face_records=faces, face_processing_status=data.get("face_processing_status", "not_started"), face_processing_error_count=data.get("face_processing_error_count", 0), matching_status=data.get("matching_status", "not_started"), match_count=data.get("match_count", 0), source=data.get("source", "local_upload"), drive_folder_id=data.get("drive_folder_id"))
+        drive_fields = {f.name: data[f.name] for f in fields(CollectionRecord) if f.name.startswith("drive_") and f.name in data}
+        return CollectionRecord(id=data["id"], created_at=datetime.fromisoformat(data["created_at"]), status=CollectionStatus(data["status"]), photos=photos, selfie=selfie, failed_photo_count=data.get("failed_photo_count", 0), face_records=faces, face_processing_status=data.get("face_processing_status", "not_started"), face_processing_error_count=data.get("face_processing_error_count", 0), photos_processed=data.get("photos_processed", 0), photos_processing_failed=data.get("photos_processing_failed", 0), matching_status=data.get("matching_status", "not_started"), match_count=data.get("match_count", 0), source=data.get("source", "local_upload"), **drive_fields)
 
     def create_collection(self, record: CollectionRecord) -> CollectionRecord:
         with self._lock:
@@ -84,3 +86,27 @@ class JsonRepository:
             data[record.id] = self._record_to_dict(record)
             self._write(data)
         return record
+
+    def update_collection(self, collection_id: str, mutate: Callable[[CollectionRecord], None]) -> CollectionRecord:
+        """Apply a short metadata update without overwriting newer photo records."""
+        with self._lock:
+            data = self._read()
+            record = self._dict_to_record(data[collection_id])
+            mutate(record)
+            data[collection_id] = self._record_to_dict(record)
+            self._write(data)
+            return record
+
+    def recover_interrupted_imports(self) -> None:
+        # The development adapter runs in one process; background jobs do not survive restart.
+        with self._lock:
+            data = self._read()
+            changed = False
+            for item in data.values():
+                if item.get("drive_import_status") in {"discovering", "processing"}:
+                    item["drive_import_status"] = "failed"
+                    item["drive_import_error"] = "The server restarted before the Drive import finished. Retry to import the remaining files."
+                    item["status"] = "ready" if item.get("photos") else "failed"
+                    changed = True
+            if changed:
+                self._write(data)

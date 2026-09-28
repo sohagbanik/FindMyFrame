@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from fastapi.responses import FileResponse
 
 from app.config import Settings, settings
-from app.models.entities import CollectionRecord, PhotoRecord, SelfieRecord
+from app.models.entities import CollectionRecord, CollectionStatus, PhotoRecord, SelfieRecord
 from app.persistence.json_repository import JsonRepository
 from app.schemas.collections import (
     CollectionStatusResponse,
@@ -30,6 +30,7 @@ from app.storage.local_storage import LocalStorage
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 repository = JsonRepository(settings.storage_root)
+repository.recover_interrupted_imports()
 storage = LocalStorage(settings.storage_root)
 ingestion_service = IngestionService(settings, repository, storage)
 face_service = FaceService(SFaceModel(settings.model_root, settings.cv_device), settings.storage_root, repository)
@@ -111,15 +112,37 @@ def upload_selfie(collection_id: str, file: UploadFile = File(...), service: Ing
     return _selfie_response(selfie)
 
 
-@router.post("/{collection_id}/import/google-drive", response_model=GoogleDriveImportResponse)
-def import_google_drive(collection_id: str, request: GoogleDriveImportRequest):
+def _run_drive_import(collection_id: str, folder_url: str) -> None:
+    try:
+        drive_import_service.import_folder(collection_id, folder_url)
+    except DriveIntegrationError as error:
+        collection = repository.get_collection(collection_id)
+        if collection:
+            collection.drive_import_status = "failed"
+            collection.drive_import_error = error.message
+            collection.status = CollectionStatus.READY if collection.photos else CollectionStatus.FAILED
+            repository.save_collection(collection)
+    except Exception:
+        collection = repository.get_collection(collection_id)
+        if collection:
+            collection.drive_import_status = "failed"
+            collection.drive_import_error = "The Drive import stopped unexpectedly. Please try again."
+            collection.status = CollectionStatus.READY if collection.photos else CollectionStatus.FAILED
+            repository.save_collection(collection)
+
+
+@router.post("/{collection_id}/import/google-drive", response_model=GoogleDriveImportResponse, status_code=status.HTTP_202_ACCEPTED)
+def import_google_drive(collection_id: str, request: GoogleDriveImportRequest, background_tasks: BackgroundTasks):
     if not repository.get_collection(collection_id):
         _raise_drive_error(DriveIntegrationError("collection_not_found", "That photo collection could not be found.", 404))
     try:
-        result = drive_import_service.import_folder(collection_id, request.folder_url)
+        collection, started = drive_import_service.begin_import(collection_id, request.folder_url)
+        folder_id = collection.drive_folder_id
     except DriveIntegrationError as error:
         _raise_drive_error(error)
-    return GoogleDriveImportResponse(collection_id=result["collection_id"], source=result["source"], drive_folder_id=result["drive_folder_id"], discovered_count=result["discovered_count"], imported_count=result["imported_count"], duplicate_count=result["duplicate_count"], failed_count=result["failed_count"], failed_files=[FailedImportResponse(**failure) for failure in result["failed_files"]])
+    if started:
+        background_tasks.add_task(_run_drive_import, collection_id, request.folder_url)
+    return GoogleDriveImportResponse(collection_id=collection_id, source="google_drive", drive_folder_id=folder_id or "", discovered_count=collection.drive_discovered_count, processed_count=collection.drive_processed_count, imported_count=collection.drive_imported_count, duplicate_count=collection.drive_duplicate_count, failed_count=collection.drive_failed_count, failed_files=collection.drive_failed_files, status=collection.drive_import_status)
 
 
 def _run_face_processing(collection_id: str) -> None:
@@ -181,7 +204,7 @@ def collection_status(collection_id: str, service: IngestionService = Depends(ge
     selfie_status = collection.selfie.processing_status if collection.selfie else None
     photo_faces = sum(photo.face_count for photo in collection.photos)
     embedded_faces = sum(photo.faces_embedded for photo in collection.photos)
-    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces, matching_status=collection.matching_status, match_count=collection.match_count, source=collection.source, drive_folder_id=collection.drive_folder_id)
+    return CollectionStatusResponse(collection_id=collection.id, status=collection.status, created_at=collection.created_at, photo_count=len(collection.photos), ingested_photo_count=len(collection.photos), failed_photo_count=failed, selfie_status=selfie_status, processing_state=collection.face_processing_status, face_processing_status=collection.face_processing_status, faces_detected=photo_faces, faces_embedded=embedded_faces, matching_status=collection.matching_status, match_count=collection.match_count, source=collection.source, drive_folder_id=collection.drive_folder_id, drive_import_status=collection.drive_import_status, drive_discovered_count=collection.drive_discovered_count, drive_processed_count=collection.drive_processed_count, drive_imported_count=collection.drive_imported_count, drive_duplicate_count=collection.drive_duplicate_count, drive_failed_count=collection.drive_failed_count, drive_import_error=collection.drive_import_error, drive_failed_files=collection.drive_failed_files, drive_current_file=collection.drive_current_file, drive_current_bytes=collection.drive_current_bytes, drive_current_size=collection.drive_current_size, photos_processed=collection.photos_processed, photos_processing_failed=collection.photos_processing_failed)
 
 
 @router.get("/{collection_id}/photos/{photo_id}")

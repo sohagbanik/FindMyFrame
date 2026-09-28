@@ -76,6 +76,19 @@ class CollectionStatusResponse(BaseModel):
     match_count: int = 0
     source: str = "local_upload"
     drive_folder_id: str | None = None
+    drive_import_status: str = "not_started"
+    drive_discovered_count: int = 0
+    drive_processed_count: int = 0
+    drive_imported_count: int = 0
+    drive_duplicate_count: int = 0
+    drive_failed_count: int = 0
+    drive_import_error: str | None = None
+    drive_failed_files: list[dict[str, str]] = Field(default_factory=list)
+    drive_current_file: str | None = None
+    drive_current_bytes: int = 0
+    drive_current_size: int | None = None
+    photos_processed: int = 0
+    photos_processing_failed: int = 0
 
 
 class FaceProcessingResponse(BaseModel):
@@ -122,7 +135,9 @@ class GoogleDriveImportResponse(BaseModel):
     source: str
     drive_folder_id: str
     discovered_count: int
+    processed_count: int
     imported_count: int
     duplicate_count: int
     failed_count: int
     failed_files: list[FailedImportResponse] = Field(default_factory=list)
+    status: str = "complete"
